@@ -108,7 +108,7 @@ PROGRAM pw2bgw
   USE mp_world, ONLY : world_comm
   USE mp_global, ONLY : mp_startup
   USE paw_variables, ONLY : okpaw
-  USE scf, ONLY : rho_core, rhog_core
+  USE scf, ONLY : rho_core, rhog_core, v !FZ: test, added v
   USE uspp, ONLY : okvan
 
   IMPLICIT NONE
@@ -145,8 +145,14 @@ PROGRAM pw2bgw
   character ( len = 256 ) :: ekin_file !FZ: for metaGGA output kinetic energy
   logical :: vltot_flag                 !FZ: for metaGGA output local potential energy
   character ( len = 256 ) :: vltot_file !FZ: for metaGGA output local potential energy
+  logical :: vrs_flag                 !FZ: for metaGGA output total potential vrs = v_h + v_xc + vltot energy
+  character ( len = 256 ) :: vrs_file !FZ: for metaGGA output total potential vrs = v_h + v_xc + vltot energy
   logical :: vnl_flag                 !FZ: for metaGGA output nonlocal potential energy
   character ( len = 256 ) :: vnl_file !FZ: for metaGGA output nonlocal potential energy
+  logical :: IHK_flag                 !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  character ( len = 256 ) :: IHK_file !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  logical :: vxc_hybrid_flag                 !FZ: for hybrid output Et - (Ekin + V_H + Vlocal + Vnonlocal) energy
+  character ( len = 256 ) :: vxc_hybrid_file !FZ: for hybrid output Et - (Ekin + V_H + Vlocal + Vnonlocal) energy
   character :: vxc_integral
   integer :: vxc_diag_nmin
   integer :: vxc_diag_nmax
@@ -158,14 +164,28 @@ PROGRAM pw2bgw
   integer :: v_h_offdiag_nmax     !FZ: for metaGGA output VHartree
   integer :: ekin_diag_nmin        !FZ: for metaGGA output kinetic energy
   integer :: ekin_diag_nmax        !FZ: for metaGGA output kinetic energy
+  integer :: ekin_offdiag_nmin        !FZ: for metaGGA output kinetic energy
+  integer :: ekin_offdiag_nmax        !FZ: for metaGGA output kinetic energy
   integer :: vltot_diag_nmin        !FZ: for metaGGA output local potential energy
   integer :: vltot_diag_nmax        !FZ: for metaGGA output local potential energy
   integer :: vltot_offdiag_nmin     !FZ: for metaGGA output local potential energy
   integer :: vltot_offdiag_nmax     !FZ: for metaGGA output local potential energy
+  integer :: vrs_diag_nmin        !FZ: for metaGGA output total potential energy
+  integer :: vrs_diag_nmax        !FZ: for metaGGA output total potential energy
+  integer :: vrs_offdiag_nmin     !FZ: for metaGGA output total potential energy
+  integer :: vrs_offdiag_nmax     !FZ: for metaGGA output total potential energy
   integer :: vnl_diag_nmin        !FZ: for metaGGA output local potential energy
   integer :: vnl_diag_nmax        !FZ: for metaGGA output local potential energy
   integer :: vnl_offdiag_nmin     !FZ: for metaGGA output local potential energy
   integer :: vnl_offdiag_nmax     !FZ: for metaGGA output local potential energy
+  integer :: IHK_diag_nmin        !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  integer :: IHK_diag_nmax        !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  integer :: IHK_offdiag_nmin     !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  integer :: IHK_offdiag_nmax     !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  integer :: vxc_hybrid_diag_nmin        !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  integer :: vxc_hybrid_diag_nmax        !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  !integer :: vxc_hybrid_offdiag_nmin     !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
+  !integer :: vxc_hybrid_offdiag_nmax     !FZ: for hybrid output Ekin + V_H + Vlocal + Vnonlocal energy
   logical :: vxc_zero_rho_core
   logical :: vscg_flag
   character ( len = 256 ) :: vscg_file
@@ -184,13 +204,18 @@ PROGRAM pw2bgw
     ekin_flag, ekin_file, v_h_diag_nmin, v_h_diag_nmax, v_h_offdiag_nmin, v_h_offdiag_nmax, &  !FZ: for metaGGA output hartree
     ekin_diag_nmin, ekin_diag_nmax, vltot_flag, vltot_file, vltot_diag_nmin, vltot_diag_nmax, & !FZ: for metaGGA output local potential
     vltot_offdiag_nmin, vltot_offdiag_nmax, vnl_flag, vnl_file, vnl_diag_nmin, vnl_diag_nmax, &   !FZ: for metaGGA output local potential
-    vnl_offdiag_nmin, vnl_offdiag_nmax  !FZ: for metaGGA output nonlocal potential
+    vnl_offdiag_nmin, vnl_offdiag_nmax, ekin_offdiag_nmin, ekin_offdiag_nmax, vrs_diag_nmin, &  !FZ: for metaGGA output nonlocal potential
+    vrs_diag_nmax, vrs_offdiag_nmin, vrs_offdiag_nmax, & !FZ: for metaGGA output nonlocal potential
+    IHK_diag_nmin, IHK_diag_nmax, IHK_offdiag_nmin, IHK_offdiag_nmax, vxc_hybrid_diag_nmin, &  !FZ: for hybrid
+    vxc_hybrid_diag_nmax!, vxc_hybrid_offdiag_nmin, vxc_hybrid_offdiag_nmax   !FZ: for hybrid
 
   integer :: ii, ios
   character ( len = 256 ) :: output_file_name
 
   character (len=256), external :: trimcheck
   character (len=1), external :: lowercase
+  integer :: unit   !FZ: test
+  unit = 4          !FZ: test
 
 #if defined(__MPI)
   CALL mp_startup ( )
@@ -230,9 +255,15 @@ PROGRAM pw2bgw
   ekin_flag = .TRUE.    !FZ: for metaGGA output kinetic energy 
   ekin_file = 'ekin.dat'  !FZ: for metaGGA output kinetic energy
   vltot_flag = .TRUE.    !FZ: for metaGGA output local potential energy 
-  vltot_file = 'vsc.dat'  !FZ: for metaGGA output local potential energy
+  vltot_file = 'vltot.dat'  !FZ: for metaGGA output local potential energy
+  vrs_flag = .TRUE.    !FZ: for metaGGA output total potential energy 
+  vrs_file = 'vrs.dat'  !FZ: for metaGGA output total potential energy
   vnl_flag = .TRUE.    !FZ: for metaGGA output nonlocal potential energy 
   vnl_file = 'vnl.dat'  !FZ: for metaGGA output nonlocal potential energy
+  IHK_flag = .TRUE.    !FZ: for hybrid output IHK energy 
+  IHK_file = 'IHK.dat'  !FZ: for hybrid output IHK energy
+  vxc_hybrid_flag = .TRUE.    !FZ: for hybrid output IHK energy 
+  vxc_hybrid_file = 'vxc_hybrid.dat'  !FZ: for hybrid output IHK energy
   vxc_integral = 'g'
   vxc_diag_nmin = 0
   vxc_diag_nmax = 0
@@ -298,8 +329,14 @@ PROGRAM pw2bgw
   !CALL mp_bcast ( ekin_file, ionode_id, world_comm )     !FZ: for metaGGA output kinetic energy
   !CALL mp_bcast ( vltot_flag, ionode_id, world_comm )     !FZ: for metaGGA output local potential energy
   !CALL mp_bcast ( vltot_file, ionode_id, world_comm )     !FZ: for metaGGA output local potential energy
+  !CALL mp_bcast ( vrs_flag, ionode_id, world_comm )     !FZ: for metaGGA output local potential energy
+  !CALL mp_bcast ( vrs_file, ionode_id, world_comm )     !FZ: for metaGGA output local potential energy
   !CALL mp_bcast ( vnl_flag, ionode_id, world_comm )     !FZ: for metaGGA output nonlocal potential energy
   !CALL mp_bcast ( vnl_file, ionode_id, world_comm )     !FZ: for metaGGA output nonlocal potential energy
+  !CALL mp_bcast ( IHK_flag, ionode_id, world_comm )     !FZ: for hybrid
+  !CALL mp_bcast ( IHK_file, ionode_id, world_comm )     !FZ: for hybrid
+  !CALL mp_bcast ( vxc_hybrid_flag, ionode_id, world_comm )     !FZ: for hybrid
+  !CALL mp_bcast ( vxc_hybrid_file, ionode_id, world_comm )     !FZ: for hybrid
   CALL mp_bcast ( vxc_diag_nmin, ionode_id, world_comm )
   CALL mp_bcast ( vxc_diag_nmax, ionode_id, world_comm )
   CALL mp_bcast ( vxc_offdiag_nmin, ionode_id, world_comm )
@@ -314,10 +351,22 @@ PROGRAM pw2bgw
   !CALL mp_bcast ( vltot_diag_nmax, ionode_id, world_comm )    !FZ: for metaGGA output local potential energy
   !CALL mp_bcast ( vltot_offdiag_nmin, ionode_id, world_comm )  !FZ: for metaGGA output local potential energy
   !CALL mp_bcast ( vltot_offdiag_nmax, ionode_id, world_comm )  !FZ: for metaGGA output local potential energy
+  !CALL mp_bcast ( vrs_diag_nmin, ionode_id, world_comm )    !FZ: for metaGGA output total potential energy
+  !CALL mp_bcast ( vrs_diag_nmax, ionode_id, world_comm )    !FZ: for metaGGA output total potential energy
+  !CALL mp_bcast ( vrs_offdiag_nmin, ionode_id, world_comm )  !FZ: for metaGGA output total potential energy
+  !CALL mp_bcast ( vrs_offdiag_nmax, ionode_id, world_comm )  !FZ: for metaGGA output total potential energy
   !CALL mp_bcast ( vnl_diag_nmin, ionode_id, world_comm )    !FZ: for metaGGA output nonlocal potential energy
   !CALL mp_bcast ( vnl_diag_nmax, ionode_id, world_comm )    !FZ: for metaGGA output nonlocal potential energy
   !CALL mp_bcast ( vnl_offdiag_nmin, ionode_id, world_comm )  !FZ: for metaGGA output nonlocal potential energy
   !CALL mp_bcast ( vnl_offdiag_nmax, ionode_id, world_comm )  !FZ: for metaGGA output nonlocal potential energy
+  !CALL mp_bcast ( IHK_diag_nmin, ionode_id, world_comm )    !FZ: for hybrid 
+  !CALL mp_bcast ( IHK_diag_nmax, ionode_id, world_comm )    !FZ: for hybrid
+  !CALL mp_bcast ( IHK_offdiag_nmin, ionode_id, world_comm )  !FZ: for hybrid
+  !CALL mp_bcast ( IHK_offdiag_nmax, ionode_id, world_comm )  !FZ: for hybrid
+  !CALL mp_bcast ( vxc_hybrid_diag_nmin, ionode_id, world_comm )    !FZ: for hybrid 
+  !CALL mp_bcast ( vxc_hybrid_diag_nmax, ionode_id, world_comm )    !FZ: for hybrid
+  !CALL mp_bcast ( vxc_hybrid_offdiag_nmin, ionode_id, world_comm )  !FZ: for hybrid
+  !CALL mp_bcast ( vxc_hybrid_offdiag_nmax, ionode_id, world_comm )  !FZ: for hybrid
   CALL mp_bcast ( vxc_zero_rho_core, ionode_id, world_comm )
   CALL mp_bcast ( vscg_flag, ionode_id, world_comm )
   CALL mp_bcast ( vscg_file, ionode_id, world_comm )
@@ -326,20 +375,41 @@ PROGRAM pw2bgw
 
   CALL read_file ( )
 
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_pw2bgw_v%of_r', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+    WRITE(unit, *)  "v%of_r = ", v%of_r    !FZ: test
+    CLOSE (unit = unit, status = 'keep')      !FZ:  test
+  ENDIF                                       !FZ:  test
+
   v_h_diag_nmin = vxc_diag_nmin       !FZ: for metaGGA output VHartree
   v_h_diag_nmax = vxc_diag_nmax       !FZ: for metaGGA output VHartree
   v_h_offdiag_nmin = vxc_offdiag_nmin    !FZ: for metaGGA output VHartree
   v_h_offdiag_nmax = vxc_offdiag_nmax    !FZ: for metaGGA output VHartree
   ekin_diag_nmin = vxc_diag_nmin       !FZ: for metaGGA output kinetic energy
   ekin_diag_nmax = vxc_diag_nmax       !FZ: for metaGGA output kinetic energy
+  ekin_offdiag_nmin = vxc_offdiag_nmin       !FZ: for metaGGA output kinetic energy
+  ekin_offdiag_nmax = vxc_offdiag_nmax       !FZ: for metaGGA output kinetic energy
   vltot_diag_nmin = vxc_diag_nmin       !FZ: for metaGGA output local potential energy
   vltot_diag_nmax = vxc_diag_nmax       !FZ: for metaGGA output local potential energy
   vltot_offdiag_nmin = vxc_offdiag_nmin    !FZ: for metaGGA output local potential energy
   vltot_offdiag_nmax = vxc_offdiag_nmax    !FZ: for metaGGA output local potential energy
+  vrs_diag_nmin = vxc_diag_nmin       !FZ: for metaGGA output total potential energy
+  vrs_diag_nmax = vxc_diag_nmax       !FZ: for metaGGA output total potential energy
+  vrs_offdiag_nmin = vxc_offdiag_nmin    !FZ: for metaGGA output total potential energy
+  vrs_offdiag_nmax = vxc_offdiag_nmax    !FZ: for metaGGA output total potential energy
   vnl_diag_nmin = vxc_diag_nmin       !FZ: for metaGGA output local potential energy
   vnl_diag_nmax = vxc_diag_nmax       !FZ: for metaGGA output local potential energy
   vnl_offdiag_nmin = vxc_offdiag_nmin    !FZ: for metaGGA output local potential energy
   vnl_offdiag_nmax = vxc_offdiag_nmax    !FZ: for metaGGA output local potential energy
+  IHK_diag_nmin = vxc_diag_nmin       !FZ: for hybrid 
+  IHK_diag_nmax = vxc_diag_nmax       !FZ: for hybrid
+  IHK_offdiag_nmin = vxc_offdiag_nmin    !FZ: for hybrid
+  IHK_offdiag_nmax = vxc_offdiag_nmax    !FZ: for hybrid
+  vxc_hybrid_diag_nmin = vxc_diag_nmin       !FZ: for hybrid
+  vxc_hybrid_diag_nmax = vxc_diag_nmax       !FZ: for hybrid
+  !vxc_hybrid_offdiag_nmin = vxc_offdiag_nmin    !FZ: for hybrid
+  !vxc_hybrid_offdiag_nmax = vxc_offdiag_nmax    !FZ: for hybrid
 
   if (ionode) then
     if (MAX (MAXVAL (ABS (rho_core (:) ) ), MAXVAL (ABS (rhog_core (:) ) ) ) &
@@ -353,10 +423,10 @@ PROGRAM pw2bgw
   if (okpaw) call errore ( 'pw2bgw', 'BGW cannot use PAW.', 4 )
   if (gamma_only) call errore ( 'pw2bgw', 'BGW cannot use gamma-only run.', 5 )
   if (nspin == 4) call errore ( 'pw2bgw', 'BGW cannot use spinors.', 6 )
-  if (real_or_complex == 1 .AND. vxc_flag .AND. vxc_offdiag_nmax > 0) &
-    call errore ( 'pw2bgw', 'Off-diagonal matrix elements of Vxc ' // &
-    'with real wavefunctions are not implemented, compute them in ' // &
-    'Sigma using VXC.', 7)
+  !if (real_or_complex == 1 .AND. vxc_flag .AND. vxc_offdiag_nmax > 0) &
+  !  call errore ( 'pw2bgw', 'Off-diagonal matrix elements of Vxc ' // &
+  !  'with real wavefunctions are not implemented, compute them in ' // &
+  !  'Sigma using VXC.', 7)
 
   CALL openfil_pp ( )
 
@@ -397,7 +467,7 @@ PROGRAM pw2bgw
 
   IF ( vxc_flag ) THEN
     output_file_name = TRIM ( tmp_dir ) // TRIM ( vxc_file )
-    IF ( ionode ) WRITE (6, '(" Test that write_vxc_r called")')  !FZ: test
+    !IF ( ionode ) WRITE (6, '(" Test that write_vxc_r called")')  !FZ: test
     IF ( vxc_integral .EQ. 'r' ) THEN
       IF ( ionode ) WRITE ( 6, '(5x,"call write_vxc_r")' )
       CALL start_clock ( 'write_vxc_r' )
@@ -424,8 +494,8 @@ PROGRAM pw2bgw
   !FZ:   This block is for metaGGA to output Hartree energy for each bands
   IF ( v_h_flag ) THEN
     output_file_name = TRIM ( tmp_dir ) // TRIM ( v_h_file )
-    IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
-      CALL errore ("pw2bgw", "write_v_h_r has vxc_integral .EQ. 'r', write_v_h_r has not been written", 1)
+    !IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
+    !  CALL errore ("pw2bgw", "write_v_h_r has vxc_integral .EQ. 'r', write_v_h_r has not been written", 1)
       !IF ( ionode ) WRITE ( 6, '(5x,"call write_v_h_r")' )
       !CALL start_clock ( 'write_v_h_r' )
       !CALL write_v_h_r ( output_file_name, &
@@ -433,8 +503,8 @@ PROGRAM pw2bgw
       !  v_h_offdiag_nmin, v_h_offdiag_nmax)
       !CALL stop_clock ( 'write_v_h_r' )
       !IF ( ionode ) WRITE ( 6, '(5x,"done write_v_h_r",/)' )
-    ENDIF
-    IF ( vxc_integral .EQ. 'g' ) THEN
+    !ENDIF
+    !IF ( vxc_integral .EQ. 'g' ) THEN
       IF ( ionode ) WRITE (6, *) "v_h_diag_nmin = ", v_h_diag_nmin, "v_h_diag_nmax = ", v_h_diag_nmax, "v_h_offdiag_nmin = ", v_h_offdiag_nmin, "v_h_offdiag_nmax = ", v_h_offdiag_nmax !FZ: test
       IF ( ionode ) WRITE ( 6, '(5x,"call write_v_h_g")' )
       CALL start_clock ( 'write_v_h_g' )
@@ -443,14 +513,14 @@ PROGRAM pw2bgw
         v_h_offdiag_nmin, v_h_offdiag_nmax)
       CALL stop_clock ( 'write_v_h_g' )
       IF ( ionode ) WRITE ( 6, '(5x,"done write_v_h_g",/)' )
-    ENDIF
+    !ENDIF
   ENDIF
   
   !FZ:   This block is for metaGGA to output local potential energy for each bands
   IF ( vltot_flag ) THEN
     output_file_name = TRIM ( tmp_dir ) // TRIM ( vltot_file )
-    IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
-      CALL errore ("pw2bgw", "write_vltot has vxc_integral .EQ. 'r', write_vltot_r has not been written", 1)
+    !IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
+    !  CALL errore ("pw2bgw", "write_vltot has vxc_integral .EQ. 'r', write_vltot_r has not been written", 1)
       !IF ( ionode ) WRITE ( 6, '(5x,"call write_v_h_r")' )
       !CALL start_clock ( 'write_v_h_r' )
       !CALL write_v_h_r ( output_file_name, &
@@ -458,8 +528,8 @@ PROGRAM pw2bgw
       !  v_h_offdiag_nmin, v_h_offdiag_nmax)
       !CALL stop_clock ( 'write_v_h_r' )
       !IF ( ionode ) WRITE ( 6, '(5x,"done write_v_h_r",/)' )
-    ENDIF
-    IF ( vxc_integral .EQ. 'g' ) THEN
+    !ENDIF
+    !IF ( vxc_integral .EQ. 'g' ) THEN
       IF ( ionode ) WRITE (6, *) "vltot_diag_nmin = ", vltot_diag_nmin, "vltot_diag_nmax = ", vltot_diag_nmax, "vltot_offdiag_nmin = ", vltot_offdiag_nmin, "vltot_offdiag_nmax = ", vltot_offdiag_nmax !FZ: test
       IF ( ionode ) WRITE ( 6, '(5x,"call write_vltot")' )
       CALL start_clock ( 'write_vltot' )
@@ -468,7 +538,31 @@ PROGRAM pw2bgw
         vltot_offdiag_nmin, vltot_offdiag_nmax)
       CALL stop_clock ( 'write_vltot' )
       IF ( ionode ) WRITE ( 6, '(5x,"done write_vltot",/)' )
-    ENDIF
+    !ENDIF
+  ENDIF
+
+  !FZ:   This block is for metaGGA to output total potential energy for each bands
+  IF ( vrs_flag ) THEN
+    output_file_name = TRIM ( tmp_dir ) // TRIM ( vrs_file )
+    !IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
+    !  CALL errore ("pw2bgw", "write_vrs has vxc_integral .EQ. 'r', write_vrs_r has not been written", 1)
+      !IF ( ionode ) WRITE ( 6, '(5x,"call write_vrs")' )
+      !CALL start_clock ( 'write_vrs' )
+      !CALL write_vrs ( output_file_name, &
+      !  vrs_diag_nmin, vrs_diag_nmax, &
+      !  vrs_offdiag_nmin, vrs_offdiag_nmax)
+      !CALL stop_clock ( 'write_vrs' )
+      !IF ( ionode ) WRITE ( 6, '(5x,"done write_vrs",/)' )
+    !ENDIF
+    !IF ( vxc_integral .EQ. 'g' ) THEN
+      IF ( ionode ) WRITE ( 6, '(5x,"call write_vrs")' )
+      CALL start_clock ( 'write_vrs' )
+      CALL write_vrs ( output_file_name, &
+        vrs_diag_nmin, vrs_diag_nmax, &
+        vrs_offdiag_nmin, vrs_offdiag_nmax)
+      CALL stop_clock ( 'write_vrs' )
+      IF ( ionode ) WRITE ( 6, '(5x,"done write_vrs",/)' )
+    !ENDIF
   ENDIF
   
   !FZ:   This block is for metaGGA to output kinetic energy for each bands
@@ -479,7 +573,8 @@ PROGRAM pw2bgw
       IF ( ionode ) WRITE ( 6, '(5x,"call write_ekin_g")' )
       CALL start_clock ( 'write_ekin_g' )
       CALL write_ekin_g ( output_file_name, &
-        ekin_diag_nmin, ekin_diag_nmax)
+        ekin_diag_nmin, ekin_diag_nmax, &
+        ekin_offdiag_nmin, ekin_offdiag_nmax)
       CALL stop_clock ( 'write_ekin_g' )
       IF ( ionode ) WRITE ( 6, '(5x,"done write_ekin_g",/)' )
     !ENDIF
@@ -488,8 +583,8 @@ PROGRAM pw2bgw
   !FZ:   This block is for metaGGA to output nonlocal potential energy for each bands
   IF ( vnl_flag ) THEN
     output_file_name = TRIM ( tmp_dir ) // TRIM ( vnl_file )
-    IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
-      CALL errore ("pw2bgw", "write_vnl has vxc_integral .EQ. 'r', write_vnl_r has not been written", 1)
+    !IF ( vxc_integral .EQ. 'r' ) THEN              !FZ this subblock is reserved for v_h_r function if needed
+    !  CALL errore ("pw2bgw", "write_vnl has vxc_integral .EQ. 'r', write_vnl_r has not been written", 1)
       !IF ( ionode ) WRITE ( 6, '(5x,"call write_v_h_r")' )
       !CALL start_clock ( 'write_v_h_r' )
       !CALL write_v_h_r ( output_file_name, &
@@ -497,8 +592,8 @@ PROGRAM pw2bgw
       !  v_h_offdiag_nmin, v_h_offdiag_nmax)
       !CALL stop_clock ( 'write_v_h_r' )
       !IF ( ionode ) WRITE ( 6, '(5x,"done write_v_h_r",/)' )
-    ENDIF
-    IF ( vxc_integral .EQ. 'g' ) THEN
+    !ENDIF
+    !IF ( vxc_integral .EQ. 'g' ) THEN
       IF ( ionode ) WRITE ( 6, '(5x,"call write_vnl")' )
       CALL start_clock ( 'write_vnl' )
       CALL write_vnl ( output_file_name, &
@@ -506,7 +601,30 @@ PROGRAM pw2bgw
         vnl_offdiag_nmin, vnl_offdiag_nmax)
       CALL stop_clock ( 'write_vnl' )
       IF ( ionode ) WRITE ( 6, '(5x,"done write_vnl",/)' )
-    ENDIF
+    !ENDIF
+  ENDIF
+
+  !FZ:   This block is for hybrid
+  IF ( IHK_flag ) THEN
+    output_file_name = TRIM ( tmp_dir ) // TRIM ( IHK_file )
+      IF ( ionode ) WRITE ( 6, '(5x,"call write_IHK")' )
+      CALL start_clock ( 'write_IHK' )
+      CALL write_IHK ( output_file_name, &
+        IHK_diag_nmin, IHK_diag_nmax, &
+        IHK_offdiag_nmin, IHK_offdiag_nmax)
+      CALL stop_clock ( 'write_IHK' )
+      IF ( ionode ) WRITE ( 6, '(5x,"done write_IHK",/)' )
+  ENDIF
+
+  !FZ:   This block is for hybrid
+  IF ( vxc_hybrid_flag ) THEN
+    output_file_name = TRIM ( tmp_dir ) // TRIM ( vxc_hybrid_file )
+      IF ( ionode ) WRITE ( 6, '(5x,"call write_vxc_hybrid")' )
+      CALL start_clock ( 'write_vxc_hybrid' )
+      CALL write_vxc_hybrid ( output_file_name, &
+        vxc_hybrid_diag_nmin, vxc_hybrid_diag_nmax)
+      CALL stop_clock ( 'write_vxc_hybrid' )
+      IF ( ionode ) WRITE ( 6, '(5x,"done write_vxc_hybrid",/)' )
   ENDIF
 
   IF ( vscg_flag ) THEN
@@ -868,6 +986,10 @@ SUBROUTINE write_wfng ( output_file_name, real_or_complex, symm_type, &
 
   ALLOCATE ( igk_l2g ( npwx, nk_l ) )
 
+   !FZ:     ig_l2g  = converts a local G-vector index into the global index
+     !FZ:               ("l2g" means local to global): ig_l2g(i) = index of i-th
+     !FZ:               local G-vector in the global array of G-vectors
+
   DO ik = 1, nk_l
     npw = ngk ( ik )
     DO ig = 1, npw
@@ -1048,6 +1170,14 @@ SUBROUTINE write_wfng ( output_file_name, real_or_complex, symm_type, &
       CALL errore ( 'write_wfng', 'igwx ngk_g', ierr )
 
     ALLOCATE ( wfng ( MAX ( 1, igwx ) ) )
+    
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_wfn_evc_output', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "evc = ", evc  !FZ:  test
+        WRITE (unit, *) "intra_pool_comm = ", intra_pool_comm  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF                                          !FZ:  test
 
     DO ib = 1, nb
 
@@ -1100,10 +1230,17 @@ SUBROUTINE write_wfng ( output_file_name, real_or_complex, symm_type, &
     DEALLOCATE ( wfng )
     DEALLOCATE ( igwf_l2g )
 
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_wfng_dist_output', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "wfng_dist = ", wfng_dist  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF                                          !FZ:  test
+
     IF ( proc_wf .AND. is .EQ. ns ) THEN
       IF ( real_or_complex .EQ. 1 ) THEN
         CALL start_clock ( 'real_wfng' )
-        CALL real_wfng ( ik, ngkdist_l, nb, ns, energy, wfng_dist )
+        CALL real_wfng ( ik, ngkdist_l, nb, ns, energy, wfng_dist )    !FZ: for real case, it copies evc to wfng_dist and the real_wfng function may modify wfng_dist, the outputed real WFN to BGW is after rotation, however, the off diagonal matrix element is calculated by the original WFN evc, so we need to get wfng_dist to calculate off diagonal term for the real case 
         CALL stop_clock ( 'real_wfng' )
       ENDIF
       DO ib = 1, nb
@@ -1136,6 +1273,13 @@ SUBROUTINE write_wfng ( output_file_name, real_or_complex, symm_type, &
     ENDIF
 
   ENDDO
+
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_wfng_dist_output2', &          !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+      WRITE (unit, *) "wfng_dist = ", wfng_dist  !FZ:  test
+    CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF                                          !FZ:  test
 
   DEALLOCATE ( igwk )
   DEALLOCATE ( ngk_g )
@@ -1670,6 +1814,7 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
   USE ener, ONLY : etxc, vtxc
   USE fft_base, ONLY : dfftp
   USE fft_interfaces, ONLY : fwfft
+  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA
   USE gvect, ONLY : ngm, ngm_g, ig_l2g, mill, ecutrho
   USE io_global, ONLY : ionode
   USE ions_base, ONLY : nat, atm, ityp, tau 
@@ -1697,7 +1842,8 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
   real (DP) :: r1 ( 3, 3 ), r2 ( 3, 3 ), adot ( 3, 3 )
   real (DP) :: bdot ( 3, 3 ), translation ( 3, 48 )
   integer, allocatable :: g_g ( :, : )
-  real (DP), allocatable :: vxcr_g ( :, : )
+  real (DP), allocatable :: vxcr_g ( :, : )  !FZ: equivalent to vxcr(:, :) in write_vxc_g
+  real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
   complex (DP), allocatable :: vxcg_g ( :, : )
 
   INTEGER, EXTERNAL :: atomic_number
@@ -1803,6 +1949,7 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
   ALLOCATE ( g_g ( nd, ng_g ) )
   ALLOCATE ( vxcr_g ( nr, ns ) )
   ALLOCATE ( vxcg_g ( ng_g, ns ) )
+  ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA   nr is dfftp%nnr, ns is nspin
 
   DO ig = 1, ng_g
     DO id = 1, nd
@@ -1814,6 +1961,7 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
       vxcg_g ( ig, is ) = ( 0.0D0, 0.0D0 )
     ENDDO
   ENDDO
+  kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
 
   DO ig = 1, ng_l
     g_g ( 1, ig_l2g ( ig ) ) = mill ( 1, ig )
@@ -1826,7 +1974,18 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
     rhog_core ( : ) = ( 0.0D0, 0.0D0 )
   ENDIF
   !
-  CALL v_xc ( rho, rho_core, rhog_core, etxc, vtxc, vxcr_g )
+  CALL set_rhoc()    !FZ: very important!!! for metaGGA, when it compute v_xc_meta, it needs core charge, here set_rhoc() compute core charge
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, vxcr_g, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc ( rho, rho_core, rhog_core, etxc, vtxc, vxcr_g )
+  ENDIF                           !FZ: for metaGGA
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_vxcr_output_vxc_g', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+      WRITE (unit, *) "vxcr_g = ", vxcr_g  !FZ:  test
+    CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF                                       !FZ:  test
   !
   DO is = 1, ns
     DO ir = 1, nr
@@ -1860,7 +2019,7 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
     WRITE ( unit ) nrecord
     WRITE ( unit ) ng_g
     IF ( real_or_complex .EQ. 1 ) THEN
-      WRITE ( unit ) ( ( dble ( vxcg_g ( ig, is ) ), &
+      WRITE ( unit ) ( ( dble ( vxcg_g ( ig, is ) ), &    !FZ: vxcg_g ( ig, is ) ) is complex number
         ig = 1, ng_g ), is = 1, ns )
     ELSE
       WRITE ( unit ) ( ( vxcg_g ( ig, is ), &
@@ -1872,6 +2031,7 @@ SUBROUTINE write_vxcg ( output_file_name, real_or_complex, symm_type, &
   DEALLOCATE ( vxcg_g )
   DEALLOCATE ( vxcr_g )
   DEALLOCATE ( g_g )
+  DEALLOCATE (kedtaur)      !FZ: for metaGGA
 
   RETURN
 
@@ -1889,6 +2049,7 @@ SUBROUTINE write_vxc0 ( output_file_name, vxc_zero_rho_core )
   USE io_global, ONLY : ionode
   USE kinds, ONLY : DP
   USE lsda_mod, ONLY : nspin
+  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA
   USE mp, ONLY : mp_sum
   USE mp_bands, ONLY : intra_bgrp_comm
   USE scf, ONLY : rho, rho_core, rhog_core
@@ -1904,6 +2065,7 @@ SUBROUTINE write_vxc0 ( output_file_name, vxc_zero_rho_core )
   integer :: nd, ns, nr, ng_l
   real (DP), allocatable :: vxcr_g ( :, : )
   complex (DP), allocatable :: vxc0_g ( : )
+  real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
 
   unit = 4
   nd = 3
@@ -1914,10 +2076,12 @@ SUBROUTINE write_vxc0 ( output_file_name, vxc_zero_rho_core )
 
   ALLOCATE ( vxcr_g ( nr, ns ) )
   ALLOCATE ( vxc0_g ( ns ) )
+  ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
 
   DO is = 1, ns
     vxc0_g ( is ) = ( 0.0D0, 0.0D0 )
   ENDDO
+  kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
 
   vxcr_g ( :, : ) = 0.0D0
   IF ( vxc_zero_rho_core ) THEN
@@ -1925,7 +2089,12 @@ SUBROUTINE write_vxc0 ( output_file_name, vxc_zero_rho_core )
     rhog_core ( : ) = ( 0.0D0, 0.0D0 )
   ENDIF
   !
-  CALL v_xc ( rho, rho_core, rhog_core, etxc, vtxc, vxcr_g )
+  CALL set_rhoc()    !FZ: very important!!! for metaGGA, when it compute v_xc_meta, it needs core charge, here set_rhoc() compute core charge
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, vxcr_g, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc ( rho, rho_core, rhog_core, etxc, vtxc, vxcr_g )     !FZ: !!! return value of vxcr_g from v_xc or v_xc_meta is real
+  ENDIF                           !FZ: for metaGGA
   !
   DO is = 1, ns
     DO ir = 1, nr
@@ -1957,6 +2126,7 @@ SUBROUTINE write_vxc0 ( output_file_name, vxc_zero_rho_core )
 
   DEALLOCATE ( vxcr_g )
   DEALLOCATE ( vxc0_g )
+  DEALLOCATE (kedtaur)      !FZ: for metaGGA
 
   RETURN
 
@@ -1982,6 +2152,7 @@ SUBROUTINE write_vxc_r (output_file_name, diag_nmin, diag_nmax, &
   USE gvect, ONLY : ngm, g
   USE io_files, ONLY : nwordwfc, iunwfc
   USE io_global,        ONLY : ionode, ionode_id, stdout    !FZ: test if need this when output to pp_out
+  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA
   !USE io_global, ONLY : ionode       !FZ: comment
   USE klist, ONLY : xk, nkstot, nks, ngk, igk_k
   USE lsda_mod, ONLY : nspin, isk
@@ -2008,6 +2179,7 @@ SUBROUTINE write_vxc_r (output_file_name, diag_nmin, diag_nmax, &
   real (DP), allocatable :: mtxeld (:, :)
   complex (DP), allocatable :: mtxelo (:, :, :)
   real (DP), allocatable :: vxcr (:, :)
+  real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
   complex (DP), allocatable :: psic2 (:)
 
   if(diag_nmin > diag_nmax) then
@@ -2049,16 +2221,23 @@ SUBROUTINE write_vxc_r (output_file_name, diag_nmin, diag_nmax, &
   ALLOCATE (vxcr (dfftp%nnr, nspin))
   IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
 
+  ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
   vxcr (:, :) = 0.0D0
+  kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
   IF ( vxc_zero_rho_core ) THEN
     rho_core ( : ) = 0.0D0
     rhog_core ( : ) = ( 0.0D0, 0.0D0 )
   ENDIF
   !
-  CALL v_xc (rho, rho_core, rhog_core, etxc, vtxc, vxcr)
+  CALL set_rhoc()    !FZ: very important!!! for metaGGA, when it compute v_xc_meta, it needs core charge, here set_rhoc() compute core charge
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, vxcr, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc (rho, rho_core, rhog_core, etxc, vtxc, vxcr)
+  ENDIF                           !FZ: for metaGGA
   !
-  IF ( ionode ) WRITE (stdout, '(" Test that stdout write_vxc_r is called")')    !FZ: test
-  IF ( ionode ) WRITE (6, '(" Test that WRITE(6, ...) write_vxc_r is called")')  !FZ: test
+  !IF ( ionode ) WRITE (stdout, '(" Test that stdout write_vxc_r is called")')    !FZ: test
+  !IF ( ionode ) WRITE (6, '(" Test that WRITE(6, ...) write_vxc_r is called")')  !FZ: test
   !IF (ionode) THEN                                          !FZ: test
   !  OPEN (unit = unit, file = TRIM (output_file_name) // 'test_pw2bgw_output_file', &  !FZ: test
   !    form = 'formatted', status = 'replace')               !FZ: test
@@ -2116,6 +2295,7 @@ SUBROUTINE write_vxc_r (output_file_name, diag_nmin, diag_nmax, &
   !ENDIF                                       !FZ:  test
 
   DEALLOCATE (vxcr)
+  DEALLOCATE (kedtaur)      !FZ: for metaGGA
   IF (noffdiag .GT. 0) DEALLOCATE (psic2)
 
   IF (ndiag .GT. 0) CALL mp_sum (mtxeld, inter_pool_comm)
@@ -2126,8 +2306,8 @@ SUBROUTINE write_vxc_r (output_file_name, diag_nmin, diag_nmax, &
   IF (ionode) THEN
     OPEN (unit = unit, file = TRIM (output_file_name), &
       form = 'formatted', status = 'replace')
-      WRITE (unit, '(" Test that write_vxc_r is called")')    !FZ:  test
-      WRITE (unit, 101) xk(:, 1), nspin * ndiag, nspin * noffdiag    !FZ:  test
+      !WRITE (unit, '(" Test that write_vxc_r is called")')    !FZ:  test
+      !WRITE (unit, 101) xk(:, 1), nspin * ndiag, nspin * noffdiag    !FZ:  test
     DO ik = 1, nkstot / nspin
       WRITE (unit, 101) xk(:, ik), nspin * ndiag, &
         nspin * noffdiag **2
@@ -2206,7 +2386,7 @@ SUBROUTINE write_v_h_g (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
   complex (DP), allocatable :: mtxeld (:, :)
   complex (DP), allocatable :: mtxelo (:, :, :)
   real (DP), allocatable :: vxcr (:, :)
-  real (DP), allocatable :: v_h (:, :)       !FZ: for metaGGA , stores hartree potential
+  real (DP), allocatable :: v_har (:, :)       !FZ: for metaGGA , stores hartree potential
   real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
   complex (DP), allocatable :: psic2 (:)
   complex (DP), allocatable :: hpsi (:)
@@ -2249,21 +2429,22 @@ SUBROUTINE write_v_h_g (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
   ENDIF
 
   ALLOCATE (vxcr (dfftp%nnr, nspin))
-  ALLOCATE (v_h (dfftp%nnr, nspin))     !FZ: for meta GGA
+  ALLOCATE (v_har (dfftp%nnr, nspin))     !FZ: for meta GGA
   IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
   ALLOCATE (hpsi (dfftp%nnr))
   ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
   vxcr (:, :) = 0.0D0
-  v_h (:, :) = 0.0D0        !FZ: for metaGGA
+  v_har(:, :) = 0.0D0        !FZ: for metaGGA
   kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
   ehart  = 0.D0
   charge = 0.D0
-  CALL v_h_only (rho%of_g(:,1), ehart, charge, v_h)   !FZ: for metaGGA   important check!rho%of_g(:,1)
+  !CALL v_h_only (rho%of_g(:,1), ehart, charge, v_har)   !FZ: for metaGGA   important check!rho%of_g(:,1)
+  CALL v_h (rho%of_g(:,1), ehart, charge, v_har)   !FZ: for metaGGA   important check!rho%of_g(:,1)
   
   IF (ionode) THEN                                          !FZ: test
     OPEN (unit = unit, file = 'test_v_h_output', &          !FZ: test
       form = 'formatted', status = 'replace')               !FZ: test
-      WRITE (unit, *) "v_h = ", v_h  !FZ:  test
+      WRITE (unit, *) "v_h = ", v_har  !FZ:  test
     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
   ENDIF                                          !FZ:  test
 
@@ -2281,7 +2462,7 @@ SUBROUTINE write_v_h_g (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
         ENDDO
         CALL invfft ('Rho', psic, dfftp)
         DO ir = 1, dfftp%nnr
-          psic (ir) = psic (ir) * v_h (ir, isk (ik))      !FZ:   v_hartree | psi>
+          psic (ir) = psic (ir) * v_har (ir, isk (ik))      !FZ:   v_hartree | psi>
         ENDDO
         CALL fwfft ('Rho', psic, dfftp)
         hpsi (:) = (0.0D0, 0.0D0)
@@ -2298,12 +2479,6 @@ SUBROUTINE write_v_h_g (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
         DO ig = 1, npw
           dummy = dummy + conjg (psic (ig)) * hpsi (ig)
         ENDDO
-        IF (ionode) THEN                                          !FZ: test
-          OPEN (unit = unit, file = 'test_v_h_output', &  !FZ: test
-            form = 'formatted', status = 'replace')               !FZ: test
-            WRITE (unit, *) "is = ",is," ib = ", ib, " dummy = ",dummy      !FZ test
-          CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
-        ENDIF                                       !FZ:  test
         dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
         CALL mp_sum (dummy, intra_bgrp_comm)
         mtxeld (ib - diag_nmin + 1, ik) = dummy
@@ -2317,7 +2492,7 @@ SUBROUTINE write_v_h_g (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
         ENDDO
         CALL invfft ('Rho', psic, dfftp)
         DO ir = 1, dfftp%nnr
-          psic (ir) = psic (ir) * v_h (ir, isk (ik))     !FZ: for metaGGA
+          psic (ir) = psic (ir) * v_har (ir, isk (ik))     !FZ: for metaGGA
         ENDDO
         CALL fwfft ('Rho', psic, dfftp)
         hpsi (:) = (0.0D0, 0.0D0)
@@ -2356,7 +2531,7 @@ SUBROUTINE write_v_h_g (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
   ENDIF                                       !FZ:  test
 
   DEALLOCATE (vxcr)
-  DEALLOCATE (v_h)          !FZ: for metaGGA calculate hartree
+  DEALLOCATE (v_har)          !FZ: for metaGGA calculate hartree
   DEALLOCATE (kedtaur)      !FZ: for metaGGA
   IF (noffdiag .GT. 0) DEALLOCATE (psic2)
   DEALLOCATE (hpsi)
@@ -2537,9 +2712,10 @@ SUBROUTINE write_vltot (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
         ENDDO
         CALL invfft ('Rho', psic, dfftp)
         DO ir = 1, dfftp%nnr
-          !psic (ir) = psic (ir) * vltot (ir)  !FZ: vltot    !FZ:   v local total | psi>
-          psic (ir) = psic (ir) * vrs (ir, isk(ik))  !FZ: vrs    !FZ:   v local total + vr | psi>
+          psic (ir) = psic (ir) * vltot (ir)  !FZ: vltot    !FZ:   v local total | psi>
+          !psic (ir) = psic (ir) * vrs (ir, isk(ik))  !FZ: vrs    !FZ:   v local total + vr | psi>
           !psic (ir) = psic (ir) * (v%of_r (ir, isk(ik)) + vltot(ir)) !FZ: vsc    !FZ:   v local total + vr | psi>
+          !psic (ir) = psic (ir) * (v%of_r (ir, isk(ik))) !FZ: v_h + vxc    !FZ: 
              !FZ:   vrs (nrxx, nspin), vltot (nrxx), vr (nrxx, nspin)  (v_h has the same structure as vr)  for v_h it is v_h (ir, isk (ik)), for vltot it is vltot(ir)
         ENDDO
         CALL fwfft ('Rho', psic, dfftp)
@@ -2576,9 +2752,10 @@ SUBROUTINE write_vltot (output_file_name, diag_nmin, diag_nmax, &     !FZ: all f
         ENDDO
         CALL invfft ('Rho', psic, dfftp)
         DO ir = 1, dfftp%nnr
-          !psic (ir) = psic (ir) * vltot (ir)  !FZ: vltot    !FZ:   v local total | psi>
-          psic (ir) = psic (ir) * vrs (ir, isk(ik))  !FZ: vrs    !FZ:   v local total + vr | psi>
+          psic (ir) = psic (ir) * vltot (ir)  !FZ: vltot    !FZ:   v local total | psi>
+          !psic (ir) = psic (ir) * vrs (ir, isk(ik))  !FZ: vrs    !FZ:   v local total + vr | psi>
           !psic (ir) = psic (ir) * (v%of_r (ir, isk(ik)) + vltot(ir)) !FZ: vsc    !FZ:   v local total + vr | psi>
+          !psic (ir) = psic (ir) * (v%of_r (ir, isk(ik))) !FZ: v_h + v_xc  !FZ:
         ENDDO
         CALL fwfft ('Rho', psic, dfftp)
         hpsi (:) = (0.0D0, 0.0D0)
@@ -2669,7 +2846,232 @@ END SUBROUTINE write_vltot
 
 !-------------------------------------------------------------------------------
 
-SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all function is for metaGGA 
+SUBROUTINE write_vrs (output_file_name, diag_nmin, diag_nmax, &     !FZ: all function is for metaGGA
+  offdiag_nmin, offdiag_nmax)                      !FZ: output total potential energy for each bands and kpts
+
+  USE constants, ONLY : rytoev
+  USE cell_base, ONLY : tpiba2, at, bg
+  USE ener, ONLY : etxc, vtxc, ehart !FZ:  added ehart
+  USE exx, ONLY : vexx
+  USE fft_base, ONLY : dfftp
+  USE fft_interfaces, ONLY : fwfft, invfft
+  !USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA commented in v_h
+  USE gvect, ONLY : ngm, g ,gstart  !FZ: added gstart 
+  USE gvecs, ONLY : doublegrid   !FZ: added for calculation of vrs
+  USE io_files, ONLY : nwordwfc, iunwfc
+  USE io_global, ONLY : ionode
+  USE kinds, ONLY : DP
+  USE klist, ONLY : xk, nkstot, nks, ngk, igk_k
+  USE lsda_mod, ONLY : nspin, isk
+  USE mp, ONLY : mp_sum
+  USE mp_pools, ONLY : inter_pool_comm
+  USE mp_bands, ONLY : intra_bgrp_comm
+  USE scf, ONLY : rho, vltot, vrs, v, kedtau !, rho_core, rhog_core  FZ: vltot for total local potential (vltot(:,:) is in real space)
+  USE wavefunctions, ONLY : evc, psic
+  USE wvfct, ONLY : npwx, nbnd, et
+
+  IMPLICIT NONE
+
+  character (len = 256), intent (in) :: output_file_name
+  integer, intent (inout) :: diag_nmin
+  integer, intent (inout) :: diag_nmax
+  integer, intent (inout) :: offdiag_nmin
+  integer, intent (inout) :: offdiag_nmax
+
+  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, noffdiag, ib2, ikk
+  integer, external :: global_kpoint_index
+  complex (DP) :: dummy
+  complex (DP), allocatable :: mtxeld (:, :)
+  complex (DP), allocatable :: mtxelo (:, :, :)
+  !real (DP), allocatable :: vxcr (:, :)
+  !real (DP), allocatable :: v_h (:, :)       !FZ: for metaGGA , stores hartree potential
+  !real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
+  complex (DP), allocatable :: psic2 (:)
+  complex (DP), allocatable :: hpsi (:)
+  !REAL(DP)  ::  charge       !FZ: for metaGGA, stores total hartree energy, charge
+
+  if(diag_nmin > diag_nmax) then
+    call errore ( 'write_vltot', 'diag_nmin > diag_nmax', diag_nmin )  !FZ:
+  endif
+  IF (diag_nmin .LT. 1) diag_nmin = 1
+  IF (diag_nmax .GT. nbnd) then
+    write(0,'(a,i6)') 'WARNING: resetting diag_nmax to max number of bands', nbnd
+    diag_nmax = nbnd
+  ENDIF
+  ndiag = MAX (diag_nmax - diag_nmin + 1, 0)
+
+  if(offdiag_nmin > offdiag_nmax) then
+    call errore ( 'write_vltot', 'offdiag_nmin > offdiag_nmax', offdiag_nmin )  !FZ:
+  endif
+  IF (offdiag_nmin .LT. 1) offdiag_nmin = 1
+  IF (offdiag_nmax .GT. nbnd)  then
+    write(0,'(a,i6)') 'WARNING: resetting offdiag_nmax to max number of bands', nbnd
+    offdiag_nmax = nbnd
+  ENDIF
+  noffdiag = MAX (offdiag_nmax - offdiag_nmin + 1, 0)
+
+  IF (ndiag .EQ. 0 .AND. noffdiag .EQ. 0) RETURN
+
+  unit = 4
+
+  iks = global_kpoint_index (nkstot, 1)
+  ike = iks + nks - 1 
+
+  IF (ndiag .GT. 0) THEN
+    ALLOCATE (mtxeld (ndiag, nkstot))
+    mtxeld (:, :) = (0.0D0, 0.0D0)
+  ENDIF
+  IF (noffdiag .GT. 0) THEN
+    ALLOCATE (mtxelo (noffdiag, noffdiag, nkstot))
+    mtxelo (:, :, :) = (0.0D0, 0.0D0)
+  ENDIF
+
+  !ALLOCATE (vxcr (dfftp%nnr, nspin))
+  !ALLOCATE (v_h (dfftp%nnr, nspin))     !FZ: for meta GGA
+  IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
+  ALLOCATE (hpsi (dfftp%nnr))
+  !ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
+  !vxcr (:, :) = 0.0D0
+  !v_h (:, :) = 0.0D0        !FZ: for metaGGA
+  !kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
+  !ehart  = 0.D0
+  !charge = 0.D0
+  CALL set_vrs( vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, &    !FZ: calculate vrs which is vltot + v_H + vxc
+                         nspin, doublegrid )     !FZ: calculate vrs which is vltot + v_H + vxc
+  
+  DO ik = iks, ike
+    ikk = ik - iks + 1
+    npw = ngk ( ik - iks + 1 )
+    CALL davcio (evc, 2*nwordwfc, iunwfc, ik - iks + 1, -1)
+    IF (ndiag .GT. 0) THEN
+      DO ib = diag_nmin, diag_nmax
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)      !FZ:   evc stores all eigenfunctions in G space, use davcio function to extract ik - iks + 1 th kpoint 's all the eigen functions for all bands, 
+        ENDDO
+        CALL invfft ('Rho', psic, dfftp)
+        DO ir = 1, dfftp%nnr
+          !psic (ir) = psic (ir) * vltot (ir)  !FZ: vltot    !FZ:   v local total | psi>
+          psic (ir) = psic (ir) * vrs (ir, isk(ik))  !FZ: vrs    !FZ:   v local total + vr | psi>
+          !psic (ir) = psic (ir) * (v%of_r (ir, isk(ik)) + vltot(ir)) !FZ: vsc    !FZ:   v local total + vr | psi>
+             !FZ:   vrs (nrxx, nspin), vltot (nrxx), vr (nrxx, nspin)  (v_h has the same structure as vr)  for v_h it is v_h (ir, isk (ik)), for vltot it is vltot(ir)
+        ENDDO
+        CALL fwfft ('Rho', psic, dfftp)
+        hpsi (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          hpsi (ig) = psic (dfftp%nl (igk_k(ig,ikk)))
+        ENDDO
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)
+        ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        dummy = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          dummy = dummy + conjg (psic (ig)) * hpsi (ig)
+        ENDDO
+        dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+        CALL mp_sum (dummy, intra_bgrp_comm)
+        mtxeld (ib - diag_nmin + 1, ik) = dummy
+      ENDDO
+    ENDIF
+    IF (noffdiag .GT. 0) THEN
+      DO ib = offdiag_nmin, offdiag_nmax
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)
+        ENDDO
+        CALL invfft ('Rho', psic, dfftp)
+        DO ir = 1, dfftp%nnr
+          !psic (ir) = psic (ir) * vltot (ir)  !FZ: vltot    !FZ:   v local total | psi>
+          psic (ir) = psic (ir) * vrs (ir, isk(ik))  !FZ: vrs    !FZ:   v local total + vr | psi>
+          !psic (ir) = psic (ir) * (v%of_r (ir, isk(ik)) + vltot(ir)) !FZ: vsc    !FZ:   v local total + vr | psi>
+        ENDDO
+        CALL fwfft ('Rho', psic, dfftp)
+        hpsi (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          hpsi (ig) = psic (dfftp%nl (igk_k (ig,ikk)))
+        ENDDO
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)
+        ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        DO ib2 = offdiag_nmin, offdiag_nmax
+          psic2 (:) = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            psic2 (ig) = evc (ig, ib2)
+          ENDDO
+          dummy = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            dummy = dummy + conjg (psic2 (ig)) * hpsi (ig)
+          ENDDO
+          dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+          CALL mp_sum (dummy, intra_bgrp_comm)
+          mtxelo (ib2 - offdiag_nmin + 1, ib - offdiag_nmin &
+            + 1, ik) = dummy
+        ENDDO
+      ENDDO
+    ENDIF
+  ENDDO
+
+  !DEALLOCATE (vxcr)
+  !DEALLOCATE (v_h)          !FZ: for metaGGA calculate hartree
+  !DEALLOCATE (kedtaur)      !FZ: for metaGGA
+  IF (noffdiag .GT. 0) DEALLOCATE (psic2)
+  DEALLOCATE (hpsi)
+
+  IF (ndiag .GT. 0) CALL mp_sum (mtxeld, inter_pool_comm)
+  IF (noffdiag .GT. 0) CALL mp_sum (mtxelo, inter_pool_comm)
+
+  CALL cryst_to_cart (nkstot, xk, at, -1)
+
+  IF (ionode) THEN
+    OPEN (unit = unit, file = TRIM (output_file_name), &
+      form = 'formatted', status = 'replace')
+    DO ik = 1, nkstot / nspin
+      WRITE (unit, 101) xk(:, ik), nspin * ndiag, &
+        nspin * noffdiag **2
+      DO is = 1, nspin
+        IF (ndiag .GT. 0) THEN
+          DO ib = diag_nmin, diag_nmax
+            WRITE (unit, 102) is, ib, mtxeld &
+              (ib - diag_nmin + 1, ik + (is - 1) * nkstot / nspin)
+          ENDDO
+        ENDIF
+        IF (noffdiag .GT. 0) THEN
+          DO ib = offdiag_nmin, offdiag_nmax
+            DO ib2 = offdiag_nmin, offdiag_nmax
+              WRITE (unit, 103) is, ib2, ib, mtxelo &
+                (ib2 - offdiag_nmin + 1, ib - offdiag_nmin + 1, &
+                ik + (is - 1) * nkstot / nspin)
+            ENDDO
+          ENDDO
+        ENDIF
+      ENDDO
+    ENDDO
+    CLOSE (unit = unit, status = 'keep')
+  ENDIF
+
+  CALL cryst_to_cart (nkstot, xk, bg, 1)
+
+  IF (ndiag .GT. 0) DEALLOCATE (mtxeld)
+  IF (noffdiag .GT. 0) DEALLOCATE (mtxelo)
+
+  RETURN
+
+  101 FORMAT (3F13.9, 2I8)
+  102 FORMAT (2I8, 2F15.9)
+  103 FORMAT (3I8, 2F15.9)
+
+END SUBROUTINE write_vrs
+
+!-------------------------------------------------------------------------------
+
+SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax, &    !FZ: all function is for metaGGA 
+ offdiag_nmin, offdiag_nmax)   !FZ: for off diagonal
 !FZ: output kinetic energy for each bands and kpts (only diagonal)
 
   USE constants, ONLY : rytoev
@@ -2706,11 +3108,14 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
   character (len = 256), intent (in) :: output_file_name
   integer, intent (inout) :: diag_nmin
   integer, intent (inout) :: diag_nmax
+  integer, intent (inout) :: offdiag_nmin
+  integer, intent (inout) :: offdiag_nmax
 
-  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, ib2, ikk
+  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, noffdiag, ib2, ikk
   integer, external :: global_kpoint_index
   complex (DP) :: dummy
   complex (DP), allocatable :: mtxeld (:, :)
+  complex (DP), allocatable :: mtxelo (:, :, :)
   real (DP), allocatable :: vxcr (:, :)
   !real (DP), allocatable :: v_h (:, :)       !FZ: for metaGGA , stores hartree potential
   !real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
@@ -2730,7 +3135,17 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
   ENDIF
   ndiag = MAX (diag_nmax - diag_nmin + 1, 0)
   
-  IF (ndiag .EQ. 0) RETURN
+  if(offdiag_nmin > offdiag_nmax) then
+    call errore ( 'write_v_h_g', 'offdiag_nmin > offdiag_nmax', offdiag_nmin )  !FZ:
+  endif
+  IF (offdiag_nmin .LT. 1) offdiag_nmin = 1
+  IF (offdiag_nmax .GT. nbnd)  then
+    write(0,'(a,i6)') 'WARNING: resetting offdiag_nmax to max number of bands', nbnd
+    offdiag_nmax = nbnd
+  ENDIF
+  noffdiag = MAX (offdiag_nmax - offdiag_nmin + 1, 0)
+
+  IF (ndiag .EQ. 0 .AND. noffdiag .EQ. 0) RETURN
 
   unit = 4
 
@@ -2741,9 +3156,14 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
     ALLOCATE (mtxeld (ndiag, nkstot))
     mtxeld (:, :) = (0.0D0, 0.0D0)
   ENDIF
+  IF (noffdiag .GT. 0) THEN
+    ALLOCATE (mtxelo (noffdiag, noffdiag, nkstot))
+    mtxelo (:, :, :) = (0.0D0, 0.0D0)
+  ENDIF
 
   ALLOCATE (vxcr (dfftp%nnr, nspin))
   !ALLOCATE (v_h (dfftp%nnr, nspin))     !FZ: for meta GGA
+  IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
   ALLOCATE (hpsi (dfftp%nnr))
   !ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
   vxcr (:, :) = 0.0D0
@@ -2862,7 +3282,47 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
         mtxeld (ib - diag_nmin + 1, ik) = dummy
       ENDDO
     ENDIF
-    
+    IF (noffdiag .GT. 0) THEN
+      DO ib = offdiag_nmin, offdiag_nmax
+        psic (:) = (0.0D0, 0.0D0)
+        hpsi (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)  !FZ: for ekin
+        ENDDO
+        !CALL invfft ('Rho', psic, dfftp)
+        !DO ir = 1, dfftp%nnr
+        !  psic (ir) = psic (ir) * v_h (ir, isk (ik))     !FZ: for metaGGA
+        !ENDDO
+        !CALL fwfft ('Rho', psic, dfftp)
+        !hpsi (:) = (0.0D0, 0.0D0)
+        !DO ig = 1, npw
+        !  hpsi (ig) = psic (dfftp%nl (igk_k (ig,ikk)))
+        !ENDDO
+        DO ig = 1, npw                                  !FZ: calculate |k+G|^2 |psi>
+          hpsi (ig) = g2kin(ig) * psic (ig)   !FZ: calculate |k+G|^2 |psi>
+        ENDDO
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)
+        ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        DO ib2 = offdiag_nmin, offdiag_nmax
+          psic2 (:) = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            psic2 (ig) = evc (ig, ib2)
+          ENDDO
+          dummy = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            dummy = dummy + conjg (psic2 (ig)) * hpsi (ig)
+          ENDDO
+          dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+          CALL mp_sum (dummy, intra_bgrp_comm)
+          mtxelo (ib2 - offdiag_nmin + 1, ib - offdiag_nmin &
+            + 1, ik) = dummy
+        ENDDO
+      ENDDO
+    ENDIF 
   ENDDO
   IF (ionode) THEN                                          !FZ: test
     OPEN (unit = unit, file = 'test_ekin_mtxeld', &  !FZ: test
@@ -2875,11 +3335,13 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
   DEALLOCATE (vxcr)
   !DEALLOCATE (v_h)          !FZ: for metaGGA calculate hartree
   !DEALLOCATE (kedtaur)      !FZ: for metaGGA
+  IF (noffdiag .GT. 0) DEALLOCATE (psic2)
   DEALLOCATE (hpsi)
   DEALLOCATE (h_diag)  !FZ: for nonlocal
   DEALLOCATE (s_diag)  !FZ: for nonlocal
 
   IF (ndiag .GT. 0) CALL mp_sum (mtxeld, inter_pool_comm)
+  IF (noffdiag .GT. 0) CALL mp_sum (mtxelo, inter_pool_comm)
 
   CALL cryst_to_cart (nkstot, xk, at, -1)
 
@@ -2896,6 +3358,15 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
               (ib - diag_nmin + 1, ik + (is - 1) * nkstot / nspin)
           ENDDO
         ENDIF
+        IF (noffdiag .GT. 0) THEN
+          DO ib = offdiag_nmin, offdiag_nmax
+            DO ib2 = offdiag_nmin, offdiag_nmax
+              WRITE (unit, 103) is, ib2, ib, mtxelo &
+                (ib2 - offdiag_nmin + 1, ib - offdiag_nmin + 1, &
+                ik + (is - 1) * nkstot / nspin)
+            ENDDO
+          ENDDO
+        ENDIF
       ENDDO
     ENDDO
     CLOSE (unit = unit, status = 'keep')
@@ -2904,6 +3375,7 @@ SUBROUTINE write_ekin_g (output_file_name, diag_nmin, diag_nmax)    !FZ: all fun
   CALL cryst_to_cart (nkstot, xk, bg, 1)
 
   IF (ndiag .GT. 0) DEALLOCATE (mtxeld)
+  IF (noffdiag .GT. 0) DEALLOCATE (mtxelo)
 
   RETURN
 
@@ -2958,10 +3430,11 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
   integer, intent (inout) :: offdiag_nmin
   integer, intent (inout) :: offdiag_nmax
 
-  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, ib2, ikk
+  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, noffdiag, ib2, ikk
   integer, external :: global_kpoint_index
   complex (DP) :: dummy
   complex (DP), allocatable :: mtxeld (:, :)
+  complex (DP), allocatable :: mtxelo (:, :, :)
   real (DP), allocatable :: vxcr (:, :)
   !real (DP), allocatable :: v_h (:, :)       !FZ: for metaGGA , stores hartree potential
   !real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
@@ -2992,7 +3465,17 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
   ENDIF
   ndiag = MAX (diag_nmax - diag_nmin + 1, 0)
   
-  IF (ndiag .EQ. 0) RETURN
+  if(offdiag_nmin > offdiag_nmax) then
+    call errore ( 'write_vxc_g', 'offdiag_nmin > offdiag_nmax', offdiag_nmin )
+  endif
+  IF (offdiag_nmin .LT. 1) offdiag_nmin = 1
+  IF (offdiag_nmax .GT. nbnd)  then
+    write(0,'(a,i6)') 'WARNING: resetting offdiag_nmax to max number of bands', nbnd
+    offdiag_nmax = nbnd
+  ENDIF
+  noffdiag = MAX (offdiag_nmax - offdiag_nmin + 1, 0)
+
+  IF (ndiag .EQ. 0 .AND. noffdiag .EQ. 0) RETURN
 
   unit = 4
 
@@ -3003,8 +3486,13 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
     ALLOCATE (mtxeld (ndiag, nkstot))
     mtxeld (:, :) = (0.0D0, 0.0D0)
   ENDIF
+  IF (noffdiag .GT. 0) THEN
+    ALLOCATE (mtxelo (noffdiag, noffdiag, nkstot))
+    mtxelo (:, :, :) = (0.0D0, 0.0D0)
+  ENDIF
 
   ALLOCATE (vxcr (dfftp%nnr, nspin))
+  IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
   !ALLOCATE (v_h (dfftp%nnr, nspin))     !FZ: for meta GGA
   ALLOCATE (hpsi (dfftp%nnr))
   ALLOCATE (hpsinl (npwx*npol, nbnd))
@@ -3125,7 +3613,43 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
         mtxeld (ib - diag_nmin + 1, ik) = dummy
       ENDDO
     ENDIF
-    
+    IF (noffdiag .GT. 0) THEN
+      DO ib = offdiag_nmin, offdiag_nmax
+        !psic (:) = (0.0D0, 0.0D0)
+        !DO ig = 1, npw
+        !  psic (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)
+        !ENDDO
+        !CALL invfft ('Rho', psic, dfftp)
+        !DO ir = 1, dfftp%nnr
+        !  psic (ir) = psic (ir) * vxcr (ir, isk (ik))
+        !ENDDO
+        !CALL fwfft ('Rho', psic, dfftp)
+        !hpsi (:) = (0.0D0, 0.0D0)
+        !DO ig = 1, npw
+        !  hpsi (ig) = psic (dfftp%nl (igk_k (ig,ikk)))
+        !ENDDO
+        !psic (:) = (0.0D0, 0.0D0)
+        !DO ig = 1, npw
+        !  psic (ig) = evc (ig, ib)
+        !ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        DO ib2 = offdiag_nmin, offdiag_nmax
+          psic2 (:) = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            psic2 (ig) = evc (ig, ib2)
+          ENDDO
+          dummy = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            dummy = dummy + conjg (psic2 (ig)) * hpsinl (ig, ib)  !FZ: for nonlocal
+          ENDDO
+          dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+          CALL mp_sum (dummy, intra_bgrp_comm)
+          mtxelo (ib2 - offdiag_nmin + 1, ib - offdiag_nmin &
+            + 1, ik) = dummy
+        ENDDO
+      ENDDO
+    ENDIF
   ENDDO
 
   DEALLOCATE (vxcr)
@@ -3136,9 +3660,11 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
   DEALLOCATE (psinl)  !FZ: for nonlocal potential
   DEALLOCATE (h_diag)  !FZ: for nonlocal
   DEALLOCATE (s_diag)  !FZ: for nonlocal
+  IF (noffdiag .GT. 0) DEALLOCATE (psic2)
   CALL deallocate_bec_type ( becp )   !FZ: important! deallocate becp
 
   IF (ndiag .GT. 0) CALL mp_sum (mtxeld, inter_pool_comm)
+  IF (noffdiag .GT. 0) CALL mp_sum (mtxelo, inter_pool_comm)
 
   CALL cryst_to_cart (nkstot, xk, at, -1)
 
@@ -3155,6 +3681,15 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
               (ib - diag_nmin + 1, ik + (is - 1) * nkstot / nspin)
           ENDDO
         ENDIF
+        IF (noffdiag .GT. 0) THEN
+          DO ib = offdiag_nmin, offdiag_nmax
+            DO ib2 = offdiag_nmin, offdiag_nmax
+              WRITE (unit, 103) is, ib2, ib, mtxelo &
+                (ib2 - offdiag_nmin + 1, ib - offdiag_nmin + 1, &
+                ik + (is - 1) * nkstot / nspin)
+            ENDDO
+          ENDDO
+        ENDIF
       ENDDO
     ENDDO
     CLOSE (unit = unit, status = 'keep')
@@ -3163,6 +3698,7 @@ SUBROUTINE write_vnl (output_file_name, diag_nmin, diag_nmax, &     !FZ: all fun
   CALL cryst_to_cart (nkstot, xk, bg, 1)
 
   IF (ndiag .GT. 0) DEALLOCATE (mtxeld)
+  IF (noffdiag .GT. 0) DEALLOCATE (mtxelo)
 
   RETURN
 
@@ -3174,18 +3710,20 @@ END SUBROUTINE write_vnl
 
 !-------------------------------------------------------------------------------
 
-SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
-  offdiag_nmin, offdiag_nmax, vxc_zero_rho_core)
+SUBROUTINE write_IHK (output_file_name, diag_nmin, diag_nmax, &     !FZ: all function is for metaGGA
+  offdiag_nmin, offdiag_nmax)                     
+!FZ: output all nonlocal energy for each bands and kpts (only diagonal)
 
   USE constants, ONLY : rytoev
   USE cell_base, ONLY : tpiba2, at, bg
-  USE ener, ONLY : etxc, vtxc
+  USE ener, ONLY : etxc, vtxc, ehart !FZ:  added ehart
   USE exx, ONLY : vexx
   USE fft_base, ONLY : dfftp
   USE fft_interfaces, ONLY : fwfft, invfft
   !USE funct, ONLY : exx_is_active      !FZ: commented
-  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA
+  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA commented in v_h
   USE gvect, ONLY : ngm, g
+  USE gvecs, ONLY : doublegrid   !FZ: added for calculation of vrs
   USE io_files, ONLY : nwordwfc, iunwfc
   USE io_global, ONLY : ionode
   USE kinds, ONLY : DP
@@ -3194,9 +3732,690 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
   USE mp, ONLY : mp_sum
   USE mp_pools, ONLY : inter_pool_comm
   USE mp_bands, ONLY : intra_bgrp_comm
+  USE scf, ONLY : rho, vrs, vltot, v_of_0, v, kedtau, rho_core, rhog_core  !FZ: for vhartree   !FZ: v_of_0 is the V(G=0) term, need to add to diagonal term which is g2kin,  because in v_H calculation, we did not calculate V(G=0)
+  USE wavefunctions, ONLY : evc, psic
+  USE wvfct, ONLY : npwx, nbnd, g2kin, et  !FZ: added g2kin
+  USE g_psi_mod,            ONLY : h_diag, s_diag !FZ: for nonlocal pseudo
+  USE noncollin_module, ONLY: noncolin, npol  !FZ: for nonlocal pseudo
+  USE uspp,                 ONLY : vkb, nkb, okvan, deeq, qq_at, qq_so, deeq_nc, indv_ijkb0 !FZ: test for nonlocal
+  USE ions_base,  ONLY : nat, ityp, ntyp => nsp !FZ: test for nonlocal
+  USE wvfct, ONLY: npwx, current_k !FZ: test for nonlocal, current_k is added for the use of h_psi_meta
+  USE lsda_mod, ONLY: current_spin !FZ: test for nonlocal
+  USE uspp_param, ONLY: upf, nh !FZ: test for nonlocal
+  USE spin_orb, ONLY: lspinorb !FZ: test for nonlocal
+  USE becmod,   ONLY : bec_type, becp, calbec, &  !FZ: added for nonlocal energies
+                         allocate_bec_type, deallocate_bec_type  !FZ: added for nonlocal energies
+
+  IMPLICIT NONE
+
+  character (len = 256), intent (in) :: output_file_name
+  integer, intent (inout) :: diag_nmin
+  integer, intent (inout) :: diag_nmax
+  integer, intent (inout) :: offdiag_nmin
+  integer, intent (inout) :: offdiag_nmax
+
+  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, noffdiag, ib2, ikk
+  integer, external :: global_kpoint_index
+  complex (DP) :: dummy
+  complex (DP), allocatable :: mtxeld (:, :)
+  complex (DP), allocatable :: mtxelo (:, :, :)
+  real (DP), allocatable :: vxcr (:, :)
+  real (DP), allocatable :: vxcr_2 (:, :)      !FZ: for hybrid, the vxc with NLCC
+  real (DP), allocatable :: vxcr_nlcc (:, :)   !FZ: for hybrid, the NLCC part of vxc
+  real (DP), allocatable :: v_har (:, :)       !FZ: for metaGGA , stores hartree potential
+  real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
+  complex (DP), allocatable :: psic2 (:)
+  complex (DP), allocatable :: psic_temp (:)  !FZ: for V_H and Vltot add to the IHK energy (they use a real space fft , this psic_temp stores the WFN ffted to real space
+  complex (DP), allocatable :: hpsi (:)
+  complex (DP), allocatable :: hpsi_temp (:)  !FZ: for V_H and Vltot add to the IHK energy
+  REAL(DP)  ::  charge       !FZ: for metaGGA, stores total hartree energy, charge
+  character(len=20) :: Ctemp
+  INTEGER :: ierr   !FZ: for nonlocal
+  !INTEGER, INTENT(IN)  :: lda, n, m
+  !COMPLEX(DP), INTENT(INOUT) :: hpsi(lda*npol,m)
+  !FZ: here we need lda, npol, m variables , but note that npwx is lda, we can use npwx as lda instead
+  !FZ: npol is included from "USE noncollin_module, ONLY: noncolin, npol" 
+  !FZ: n is number of plane waves in specific k point, it is npw, we specify it later npw = ngk ( ik - iks + 1 )
+  !FZ: m is number of band, here we can use nbnd , (diag_nmax is nband) 
+  !FZ: nbnd is the total number of bands used in nscf calculation (for Si it is 33)
+  !COMPLEX(DP), INTENT(OUT) :: hpsinl(npwx*npol,nbnd)   !FZ: the hpsi to collect nonlocal potential (and a special potential in metaGGA (h_psi_meta)) 
+  !COMPLEX(DP), INTENT(OUT) :: psinl(npwx*npol,nbnd)   !FZ: the psi used to calculate becp (we need  CALL calbec ( n, vkb, psi_nl, becp, m )) 
+  COMPLEX(DP), allocatable :: hpsinl(:,:)   !FZ: the hpsi to collect nonlocal potential (and a special potential in metaGGA (h_psi_meta)) 
+  COMPLEX(DP), allocatable :: psinl(:,:)   !FZ: the psi used to calculate becp (we need  CALL calbec ( n, vkb, psi_nl, becp, m )) 
+
+  if(diag_nmin > diag_nmax) then
+    call errore ( 'write_IHK', 'diag_nmin > diag_nmax', diag_nmin )  !FZ:
+  endif
+  IF (diag_nmin .LT. 1) diag_nmin = 1
+  IF (diag_nmax .GT. nbnd) then
+    write(0,'(a,i6)') 'WARNING: resetting diag_nmax to max number of bands', nbnd
+    diag_nmax = nbnd
+  ENDIF
+  ndiag = MAX (diag_nmax - diag_nmin + 1, 0)
+  
+  if(offdiag_nmin > offdiag_nmax) then
+    call errore ( 'write_IHK', 'offdiag_nmin > offdiag_nmax', offdiag_nmin )
+  endif
+  IF (offdiag_nmin .LT. 1) offdiag_nmin = 1
+  IF (offdiag_nmax .GT. nbnd)  then
+    write(0,'(a,i6)') 'WARNING: resetting offdiag_nmax to max number of bands', nbnd
+    offdiag_nmax = nbnd
+  ENDIF
+  noffdiag = MAX (offdiag_nmax - offdiag_nmin + 1, 0)
+
+  IF (ndiag .EQ. 0 .AND. noffdiag .EQ. 0) RETURN
+
+  unit = 4
+
+  iks = global_kpoint_index (nkstot, 1)
+  ike = iks + nks - 1 
+
+  IF (ndiag .GT. 0) THEN
+    ALLOCATE (mtxeld (ndiag, nkstot))
+    mtxeld (:, :) = (0.0D0, 0.0D0)
+  ENDIF
+  IF (noffdiag .GT. 0) THEN
+    ALLOCATE (mtxelo (noffdiag, noffdiag, nkstot))
+    mtxelo (:, :, :) = (0.0D0, 0.0D0)
+  ENDIF
+
+  ALLOCATE (vxcr (dfftp%nnr, nspin))
+  ALLOCATE (vxcr_2 (dfftp%nnr, nspin))    !FZ: for hybrid functional, nlcc
+  ALLOCATE (vxcr_nlcc (dfftp%nnr, nspin))  !FZ: for hybrid nlcc
+  IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
+  ALLOCATE (v_har (dfftp%nnr, nspin))     !FZ: for meta GGA
+  ALLOCATE (hpsi (dfftp%nnr))
+  ALLOCATE (hpsi_temp (dfftp%nnr))
+  ALLOCATE (psic_temp (dfftp%nnr))
+  ALLOCATE (hpsinl (npwx*npol, nbnd))
+  ALLOCATE (psinl (npwx*npol, nbnd))
+  ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
+  CALL allocate_bec_type ( nkb, nbnd, becp, intra_bgrp_comm )   !FZ: important! initialize becp!
+
+  vxcr (:, :) = 0.0D0
+  vxcr_2 (:, :) = 0.0D0   !FZ: for hybrid functional, nlcc
+  vxcr_nlcc (:, :) = 0.0D0  !FZ: for hybrid functional, nlcc
+  hpsinl(:,:) = (0.0D0, 0.0D0)  !FZ: for nonlocal potential , initialize
+  psinl(:,:) = (0.0D0, 0.0D0)  !FZ: for nonlocal potential , initialize
+  v_har (:, :) = 0.0D0        !FZ: for metaGGA
+  kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
+  ehart  = 0.D0
+  charge = 0.D0
+
+  !FZ: calculate NLCC part of vxc, added to IHK energy
+  rho_core ( : ) = 0.0D0
+  rhog_core ( : ) = ( 0.0D0, 0.0D0 )
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, vxcr, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc_pw2bgw (rho, rho_core, rhog_core, etxc, vtxc, vxcr)
+  ENDIF
+  CALL set_rhoc()    !FZ: very important!!! for metaGGA, when it compute v_xc_meta, it needs core charge, here set_rhoc() compute core charge
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, vxcr_2, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc_pw2bgw (rho, rho_core, rhog_core, etxc, vtxc, vxcr_2)
+  ENDIF
+
+
+
+  CALL v_h_only (rho%of_g(:,1), ehart, charge, v_har)   !FZ: for metaGGA   important check!rho%of_g(:,1)
+  ALLOCATE( h_diag( npwx, npol ), STAT=ierr )    !FZ: for nonlocal
+  IF( ierr /= 0 ) &    !FZ: for nonlocal
+     CALL errore( ' diag_bands ', ' cannot allocate h_diag ', ABS(ierr) )     !FZ: for nonlocal
+  ALLOCATE( s_diag( npwx, npol ), STAT=ierr )     !FZ: for nonlocal
+  IF( ierr /= 0 ) &     !FZ: for nonlocal
+     CALL errore( ' diag_bands ', ' cannot allocate s_diag ', ABS(ierr) )     !FZ: for nonlocal
+  h_diag (:,:) = 0.0D0  !FZ: for nonlocal
+  s_diag (:,:) = 0.0D0  !FZ: for nonlocal
+  IF ( ionode ) WRITE (6, *) "nkb = ", nkb  !FZ: for future debug, when nkb > 0, we should calculate CALL add_vuspsi( lda, n, m, hpsi )
+  CALL set_vrs( vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, &    !FZ: calculate vrs which is vltot + v_H + vxc
+                         nspin, doublegrid )     !FZ: calculate vrs which is vltot + v_H + vxc
+  
+  DO ik = iks, ike
+    ikk = ik - iks + 1
+    npw = ngk ( ik - iks + 1 )
+    CALL davcio (evc, 2*nwordwfc, iunwfc, ik - iks + 1, -1)
+    CALL threaded_memcpy(psinl, evc, nbnd*npol*npwx*2)
+    vkb (:,:) = 0.0D0  !FZ: for nonlocal
+    IF ( nkb > 0 ) CALL init_us_2( ngk(ik), igk_k(1,ik), xk(1,ik), vkb ) !FZ: for nonlocal   !important : initialize vkb!
+    h_diag (:,:) = 0.0D0  !FZ: for nonlocal
+    s_diag (:,:) = 0.0D0  !FZ: for nonlocal
+    hpsinl (:,:) = 0.0D0  !FZ: for nonlocal
+    CALL usnldiag( npw, h_diag, s_diag )   !FZ: add nonlocal pseudopotential term to diagonal part of Hamiltonian
+    g2kin(:) = 0.0D0  !FZ: important: initialize g2kin
+    call g2_kin( ik )    !FZ:  check: if index is ik or ikk
+    CALL calbec ( npw, vkb, psinl, becp, nbnd )   !FZ: becp  ! <beta|psi>    original form: calbec ( n, vkb, psi, becp, m ) 
+    !FZ: Here vkb is input, becp is output, so we need to initialize vkb before . vkb depends on k, so for each k point, we need to call initus_2
+    CALL add_vuspsi( npwx, npw, nbnd, hpsinl )   !FZ:  CALL add_vuspsi( lda, n, m, hpsi )
+    current_k = ik      !FZ: for metaGGA important, because h_psi_meta uses the variable current_k, we need to specify it here
+    if (dft_is_meta()) call h_psi_meta (npwx, npw, nbnd, psinl, hpsinl)   !FZ: add specific contribution from metaGGA to hpsi (when call this, it is added to hpsi)   
+    !FZ: original h_psi_meta (lda, n, m, psi, hpsi)
+    IF (ndiag .GT. 0) THEN
+      DO ib = diag_nmin, diag_nmax
+        psic (:) = (0.0D0, 0.0D0)
+        hpsi (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+        psic_temp (:) = (0.0D0, 0.0D0)
+        hpsi_temp (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+        DO ig = 1, npw
+          psic (igk_k(ig,ikk)) = evc (ig, ib)      !FZ:   evc stores all eigenfunctions in G space, use davcio function to extract ik - iks + 1 th kpoint 's all the eigen functions for all bands, 
+        ENDDO
+        DO ig = 1, npw
+          psic_temp (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)      !FZ:   evc stores all eigenfunctions in G space, use davcio function to extract ik - iks + 1 th kpoint 's all the eigen functions for all bands,
+        ENDDO
+        CALL invfft ('Rho', psic_temp, dfftp)
+        DO ir = 1, dfftp%nnr
+          psic_temp (ir) = psic_temp (ir) * (vltot (ir) + v_har (ir, isk (ik)) + vxcr_2 (ir, isk (ik)) - vxcr (ir, isk (ik)))      !FZ:   v_h+ vltot + nlcc part of vxc | psi>
+        ENDDO
+        CALL fwfft ('Rho', psic_temp, dfftp)
+        !hpsi (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          hpsi_temp (ig) = psic_temp (dfftp%nl (igk_k(ig,ikk)))
+        ENDDO
+        DO ig = 1, npw                                  !FZ: calculate |k+G|^2 |psi>
+          hpsi (ig) = g2kin(ig) * psic (igk_k(ig,ikk))   !FZ: calculate |k+G|^2 |psi>
+          !hpsi (ig) = (g2kin(ig) + h_diag(ig, 1)) * psic (igk_k(ig,ikk))   !FZ: calculate |k+G|^2 |psi>
+        ENDDO                                           !FZ: calculate |k+G|^2 |psi>
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)      !FZ: 
+          !psic (igk_k(ig,ikk)) = evc (ig, ib)  !FZ: wrong
+        ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        dummy = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          !dummy = dummy + conjg (psic (ig)) * hpsi (ig)
+          dummy = dummy + conjg (psic (ig)) * (hpsinl (ig, ib) + hpsi(ig) + hpsi_temp (ig))    !FZ: for IHK
+        ENDDO
+        dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+        CALL mp_sum (dummy, intra_bgrp_comm)
+        mtxeld (ib - diag_nmin + 1, ik) = dummy
+      ENDDO
+    ENDIF
+    IF (noffdiag .GT. 0) THEN
+      DO ib = offdiag_nmin, offdiag_nmax
+        psic (:) = (0.0D0, 0.0D0)
+        hpsi (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)  !FZ: for ekin
+        ENDDO
+        psic_temp (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic_temp (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)
+        ENDDO
+        CALL invfft ('Rho', psic_temp, dfftp)
+        DO ir = 1, dfftp%nnr
+          psic_temp (ir) = psic_temp (ir) * (vltot (ir) + v_har (ir, isk (ik)) + vxcr_2 (ir, isk (ik)) - vxcr (ir, isk (ik)))
+        ENDDO
+        CALL fwfft ('Rho', psic_temp, dfftp)
+        hpsi_temp (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          hpsi_temp (ig) = psic_temp (dfftp%nl (igk_k (ig,ikk)))
+        ENDDO
+        !psic (:) = (0.0D0, 0.0D0)
+        !DO ig = 1, npw
+        !  psic (ig) = evc (ig, ib)
+        !ENDDO
+        DO ig = 1, npw                                  !FZ: calculate |k+G|^2 |psi>
+          hpsi (ig) = g2kin(ig) * psic (ig)   !FZ: calculate |k+G|^2 |psi>
+        ENDDO
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)
+        ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        DO ib2 = offdiag_nmin, offdiag_nmax
+          psic2 (:) = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            psic2 (ig) = evc (ig, ib2)
+          ENDDO
+          dummy = (0.0D0, 0.0D0)
+          DO ig = 1, npw
+            dummy = dummy + conjg (psic2 (ig)) * (hpsinl (ig, ib) + hpsi(ig) + hpsi_temp (ig)) !FZ: for nonlocal
+          ENDDO
+          dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+          CALL mp_sum (dummy, intra_bgrp_comm)
+          mtxelo (ib2 - offdiag_nmin + 1, ib - offdiag_nmin &
+            + 1, ik) = dummy
+        ENDDO
+      ENDDO
+    ENDIF
+  ENDDO
+
+  DEALLOCATE (vxcr)
+  DEALLOCATE (vxcr_2)
+  DEALLOCATE (vxcr_nlcc)
+  DEALLOCATE (v_har)          !FZ: for metaGGA calculate hartree
+  DEALLOCATE (kedtaur)      !FZ: for metaGGA
+  DEALLOCATE (hpsi)
+  DEALLOCATE (hpsinl) !FZ: for nonlocal potential
+  DEALLOCATE (psinl)  !FZ: for nonlocal potential
+  DEALLOCATE (h_diag)  !FZ: for nonlocal
+  DEALLOCATE (s_diag)  !FZ: for nonlocal
+  IF (noffdiag .GT. 0) DEALLOCATE (psic2)
+  CALL deallocate_bec_type ( becp )   !FZ: important! deallocate becp
+  DEALLOCATE (hpsi_temp)
+  DEALLOCATE (psic_temp)
+
+  IF (ndiag .GT. 0) CALL mp_sum (mtxeld, inter_pool_comm)
+  IF (noffdiag .GT. 0) CALL mp_sum (mtxelo, inter_pool_comm)
+
+  CALL cryst_to_cart (nkstot, xk, at, -1)
+
+  IF (ionode) THEN
+    OPEN (unit = unit, file = TRIM (output_file_name), &
+      form = 'formatted', status = 'replace')
+    DO ik = 1, nkstot / nspin
+      WRITE (unit, 101) xk(:, ik), nspin * ndiag!, &   !FZ: commented
+        !nspin * noffdiag **2     !FZ: commented
+      DO is = 1, nspin
+        IF (ndiag .GT. 0) THEN
+          DO ib = diag_nmin, diag_nmax
+            WRITE (unit, 102) is, ib, mtxeld &
+              (ib - diag_nmin + 1, ik + (is - 1) * nkstot / nspin)
+          ENDDO
+        ENDIF
+        IF (noffdiag .GT. 0) THEN
+          DO ib = offdiag_nmin, offdiag_nmax
+            DO ib2 = offdiag_nmin, offdiag_nmax
+              WRITE (unit, 103) is, ib2, ib, mtxelo &
+                (ib2 - offdiag_nmin + 1, ib - offdiag_nmin + 1, &
+                ik + (is - 1) * nkstot / nspin)
+            ENDDO
+          ENDDO
+        ENDIF
+      ENDDO
+    ENDDO
+    CLOSE (unit = unit, status = 'keep')
+  ENDIF
+
+  CALL cryst_to_cart (nkstot, xk, bg, 1)
+
+  IF (ndiag .GT. 0) DEALLOCATE (mtxeld)
+  IF (noffdiag .GT. 0) DEALLOCATE (mtxelo)
+
+  RETURN
+
+  101 FORMAT (3F13.9, 1I8)   !FZ: changed from 2I8 to 1I8
+  102 FORMAT (2I8, 2F15.9)
+  103 FORMAT (3I8, 2F15.9)
+
+END SUBROUTINE write_IHK
+
+!-------------------------------------------------------------------------------
+
+SUBROUTINE write_vxc_hybrid (output_file_name, diag_nmin, diag_nmax)!, &     !FZ: all function is for metaGGA
+!FZ: output all nonlocal energy for each bands and kpts (only diagonal)
+
+  USE constants, ONLY : rytoev
+  USE cell_base, ONLY : tpiba2, at, bg
+  USE ener, ONLY : etxc, vtxc, ehart !FZ:  added ehart
+  USE exx, ONLY : vexx
+  USE fft_base, ONLY : dfftp
+  USE fft_interfaces, ONLY : fwfft, invfft
+  !USE funct, ONLY : exx_is_active      !FZ: commented
+  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta     !FZ: Added for metaGGA commented in v_h
+  USE gvect, ONLY : ngm, g
+  USE gvecs, ONLY : doublegrid   !FZ: added for calculation of vrs
+  USE io_files, ONLY : nwordwfc, iunwfc
+  USE io_global, ONLY : ionode
+  USE kinds, ONLY : DP
+  USE klist, ONLY : xk, nkstot, nks, ngk, igk_k
+  USE lsda_mod, ONLY : nspin, isk
+  USE mp, ONLY : mp_sum
+  USE mp_pools, ONLY : inter_pool_comm
+  USE mp_bands, ONLY : intra_bgrp_comm
+  USE scf, ONLY : rho, vrs, vltot, v_of_0, v, kedtau, rho_core, rhog_core  !FZ: for vhartree   !FZ: v_of_0 is the V(G=0) term, need to add to diagonal term which is g2kin,  because in v_H calculation, we did not calculate V(G=0)
+  USE wavefunctions, ONLY : evc, psic
+  USE wvfct, ONLY : npwx, nbnd, g2kin, et  !FZ: added g2kin
+  USE g_psi_mod,            ONLY : h_diag, s_diag !FZ: for nonlocal pseudo
+  USE noncollin_module, ONLY: noncolin, npol  !FZ: for nonlocal pseudo
+  USE uspp,                 ONLY : vkb, nkb, okvan, deeq, qq_at, qq_so, deeq_nc, indv_ijkb0 !FZ: test for nonlocal
+  USE ions_base,  ONLY : nat, ityp, ntyp => nsp !FZ: test for nonlocal
+  USE wvfct, ONLY: npwx, current_k !FZ: test for nonlocal, current_k is added for the use of h_psi_meta
+  USE lsda_mod, ONLY: current_spin !FZ: test for nonlocal
+  USE uspp_param, ONLY: upf, nh !FZ: test for nonlocal
+  USE spin_orb, ONLY: lspinorb !FZ: test for nonlocal
+  USE becmod,   ONLY : bec_type, becp, calbec, &  !FZ: added for nonlocal energies
+                         allocate_bec_type, deallocate_bec_type  !FZ: added for nonlocal energies
+
+  IMPLICIT NONE
+
+  character (len = 256), intent (in) :: output_file_name
+  integer, intent (inout) :: diag_nmin
+  integer, intent (inout) :: diag_nmax
+  !integer, intent (inout) :: offdiag_nmin
+  !integer, intent (inout) :: offdiag_nmax
+
+  integer :: npw, ik, is, ib, ig, ir, unit, iks, ike, ndiag, noffdiag, ib2, ikk
+  integer, external :: global_kpoint_index
+  complex (DP) :: dummy
+  complex (DP), allocatable :: mtxeld (:, :)
+  complex (DP), allocatable :: mtxelo (:, :, :)
+  real (DP), allocatable :: vxcr (:, :)
+  real (DP), allocatable :: vxcr_2 (:, :)      !FZ: for hybrid, the vxc with NLCC
+  real (DP), allocatable :: vxcr_nlcc (:, :)   !FZ: for hybrid, the NLCC part of vxc
+  real (DP), allocatable :: v_har (:, :)       !FZ: for metaGGA , stores hartree potential
+  real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
+  complex (DP), allocatable :: psic2 (:)
+  complex (DP), allocatable :: psic_temp (:)  !FZ: for V_H and Vltot add to the IHK energy (they use a real space fft , this psic_temp stores the WFN ffted to real space
+  complex (DP), allocatable :: hpsi (:)
+  complex (DP), allocatable :: hpsi_temp (:)  !FZ: for V_H and Vltot add to the IHK energy
+  REAL(DP)  ::  charge       !FZ: for metaGGA, stores total hartree energy, charge
+  character(len=20) :: Ctemp
+  INTEGER :: ierr   !FZ: for nonlocal
+  !INTEGER, INTENT(IN)  :: lda, n, m
+  !COMPLEX(DP), INTENT(INOUT) :: hpsi(lda*npol,m)
+  !FZ: here we need lda, npol, m variables , but note that npwx is lda, we can use npwx as lda instead
+  !FZ: npol is included from "USE noncollin_module, ONLY: noncolin, npol" 
+  !FZ: n is number of plane waves in specific k point, it is npw, we specify it later npw = ngk ( ik - iks + 1 )
+  !FZ: m is number of band, here we can use nbnd , (diag_nmax is nband) 
+  !FZ: nbnd is the total number of bands used in nscf calculation (for Si it is 33)
+  !COMPLEX(DP), INTENT(OUT) :: hpsinl(npwx*npol,nbnd)   !FZ: the hpsi to collect nonlocal potential (and a special potential in metaGGA (h_psi_meta)) 
+  !COMPLEX(DP), INTENT(OUT) :: psinl(npwx*npol,nbnd)   !FZ: the psi used to calculate becp (we need  CALL calbec ( n, vkb, psi_nl, becp, m )) 
+  COMPLEX(DP), allocatable :: hpsinl(:,:)   !FZ: the hpsi to collect nonlocal potential (and a special potential in metaGGA (h_psi_meta)) 
+  COMPLEX(DP), allocatable :: psinl(:,:)   !FZ: the psi used to calculate becp (we need  CALL calbec ( n, vkb, psi_nl, becp, m )) 
+
+  if(diag_nmin > diag_nmax) then
+    call errore ( 'write_vxc_hybrid', 'diag_nmin > diag_nmax', diag_nmin )  !FZ:
+  endif
+  IF (diag_nmin .LT. 1) diag_nmin = 1
+  IF (diag_nmax .GT. nbnd) then
+    write(0,'(a,i6)') 'WARNING: resetting diag_nmax to max number of bands', nbnd
+    diag_nmax = nbnd
+  ENDIF
+  ndiag = MAX (diag_nmax - diag_nmin + 1, 0)
+  
+  !if(offdiag_nmin > offdiag_nmax) then
+  !  call errore ( 'write_vxc_hybrid', 'offdiag_nmin > offdiag_nmax', offdiag_nmin )
+  !endif
+  !IF (offdiag_nmin .LT. 1) offdiag_nmin = 1
+  !IF (offdiag_nmax .GT. nbnd)  then
+  !  write(0,'(a,i6)') 'WARNING: resetting offdiag_nmax to max number of bands', nbnd
+  !  offdiag_nmax = nbnd
+  !ENDIF
+  !noffdiag = MAX (offdiag_nmax - offdiag_nmin + 1, 0)
+
+  IF (ndiag .EQ. 0 .AND. noffdiag .EQ. 0) RETURN
+
+  unit = 4
+
+  iks = global_kpoint_index (nkstot, 1)
+  ike = iks + nks - 1 
+
+  IF (ndiag .GT. 0) THEN
+    ALLOCATE (mtxeld (ndiag, nkstot))
+    mtxeld (:, :) = (0.0D0, 0.0D0)
+  ENDIF
+  !IF (noffdiag .GT. 0) THEN
+  !  ALLOCATE (mtxelo (noffdiag, noffdiag, nkstot))
+  !  mtxelo (:, :, :) = (0.0D0, 0.0D0)
+  !ENDIF
+
+  ALLOCATE (vxcr (dfftp%nnr, nspin))
+  ALLOCATE (vxcr_2 (dfftp%nnr, nspin))    !FZ: for hybrid functional, nlcc
+  ALLOCATE (vxcr_nlcc (dfftp%nnr, nspin))  !FZ: for hybrid nlcc
+  IF (noffdiag .GT. 0) ALLOCATE (psic2 (dfftp%nnr))
+  ALLOCATE (v_har (dfftp%nnr, nspin))     !FZ: for meta GGA
+  ALLOCATE (hpsi (dfftp%nnr))
+  ALLOCATE (hpsi_temp (dfftp%nnr))
+  ALLOCATE (psic_temp (dfftp%nnr))
+  ALLOCATE (hpsinl (npwx*npol, nbnd))
+  ALLOCATE (psinl (npwx*npol, nbnd))
+  ALLOCATE (kedtaur (dfftp%nnr, nspin))   !FZ: for meta GGA
+  CALL allocate_bec_type ( nkb, nbnd, becp, intra_bgrp_comm )   !FZ: important! initialize becp!
+
+  vxcr (:, :) = 0.0D0
+  vxcr_2 (:, :) = 0.0D0   !FZ: for hybrid functional, nlcc
+  vxcr_nlcc (:, :) = 0.0D0  !FZ: for hybrid functional, nlcc
+  hpsinl(:,:) = (0.0D0, 0.0D0)  !FZ: for nonlocal potential , initialize
+  psinl(:,:) = (0.0D0, 0.0D0)  !FZ: for nonlocal potential , initialize
+  v_har (:, :) = 0.0D0        !FZ: for metaGGA
+  kedtaur (:, :) = 0.0D0    !FZ: for metaGGA
+  ehart  = 0.D0
+  charge = 0.D0
+
+  !FZ: calculate NLCC part of vxc, added to IHK energy
+  rho_core ( : ) = 0.0D0
+  rhog_core ( : ) = ( 0.0D0, 0.0D0 )
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, vxcr, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc_pw2bgw (rho, rho_core, rhog_core, etxc, vtxc, vxcr)
+  ENDIF
+  CALL set_rhoc()    !FZ: very important!!! for metaGGA, when it compute v_xc_meta, it needs core charge, here set_rhoc() compute core charge
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
+     CALL v_xc_meta_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, vxcr_2, kedtaur )    !FZ: for metaGGA
+  ELSE                            !FZ: for metaGGA
+     CALL v_xc_pw2bgw (rho, rho_core, rhog_core, etxc, vtxc, vxcr_2)
+  ENDIF
+
+
+
+  CALL v_h_only (rho%of_g(:,1), ehart, charge, v_har)   !FZ: for metaGGA   important check!rho%of_g(:,1)
+  ALLOCATE( h_diag( npwx, npol ), STAT=ierr )    !FZ: for nonlocal
+  IF( ierr /= 0 ) &    !FZ: for nonlocal
+     CALL errore( ' diag_bands ', ' cannot allocate h_diag ', ABS(ierr) )     !FZ: for nonlocal
+  ALLOCATE( s_diag( npwx, npol ), STAT=ierr )     !FZ: for nonlocal
+  IF( ierr /= 0 ) &     !FZ: for nonlocal
+     CALL errore( ' diag_bands ', ' cannot allocate s_diag ', ABS(ierr) )     !FZ: for nonlocal
+  h_diag (:,:) = 0.0D0  !FZ: for nonlocal
+  s_diag (:,:) = 0.0D0  !FZ: for nonlocal
+  IF ( ionode ) WRITE (6, *) "nkb = ", nkb  !FZ: for future debug, when nkb > 0, we should calculate CALL add_vuspsi( lda, n, m, hpsi )
+  CALL set_vrs( vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, &    !FZ: calculate vrs which is vltot + v_H + vxc
+                         nspin, doublegrid )     !FZ: calculate vrs which is vltot + v_H + vxc
+  
+  DO ik = iks, ike
+    ikk = ik - iks + 1
+    npw = ngk ( ik - iks + 1 )
+    CALL davcio (evc, 2*nwordwfc, iunwfc, ik - iks + 1, -1)
+    CALL threaded_memcpy(psinl, evc, nbnd*npol*npwx*2)
+    vkb (:,:) = 0.0D0  !FZ: for nonlocal
+    IF ( nkb > 0 ) CALL init_us_2( ngk(ik), igk_k(1,ik), xk(1,ik), vkb ) !FZ: for nonlocal   !important : initialize vkb!
+    h_diag (:,:) = 0.0D0  !FZ: for nonlocal
+    s_diag (:,:) = 0.0D0  !FZ: for nonlocal
+    hpsinl (:,:) = 0.0D0  !FZ: for nonlocal
+    CALL usnldiag( npw, h_diag, s_diag )   !FZ: add nonlocal pseudopotential term to diagonal part of Hamiltonian
+    g2kin(:) = 0.0D0  !FZ: important: initialize g2kin
+    call g2_kin( ik )    !FZ:  check: if index is ik or ikk
+    CALL calbec ( npw, vkb, psinl, becp, nbnd )   !FZ: becp  ! <beta|psi>    original form: calbec ( n, vkb, psi, becp, m ) 
+    !FZ: Here vkb is input, becp is output, so we need to initialize vkb before . vkb depends on k, so for each k point, we need to call initus_2
+    CALL add_vuspsi( npwx, npw, nbnd, hpsinl )   !FZ:  CALL add_vuspsi( lda, n, m, hpsi )
+    current_k = ik      !FZ: for metaGGA important, because h_psi_meta uses the variable current_k, we need to specify it here
+    if (dft_is_meta()) call h_psi_meta (npwx, npw, nbnd, psinl, hpsinl)   !FZ: add specific contribution from metaGGA to hpsi (when call this, it is added to hpsi)   
+    !FZ: original h_psi_meta (lda, n, m, psi, hpsi)
+    IF (ndiag .GT. 0) THEN
+      DO ib = diag_nmin, diag_nmax
+        psic (:) = (0.0D0, 0.0D0)
+        hpsi (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+        psic_temp (:) = (0.0D0, 0.0D0)
+        hpsi_temp (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+        DO ig = 1, npw
+          psic (igk_k(ig,ikk)) = evc (ig, ib)      !FZ:   evc stores all eigenfunctions in G space, use davcio function to extract ik - iks + 1 th kpoint 's all the eigen functions for all bands, 
+        ENDDO
+        DO ig = 1, npw
+          psic_temp (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)      !FZ:   evc stores all eigenfunctions in G space, use davcio function to extract ik - iks + 1 th kpoint 's all the eigen functions for all bands,
+        ENDDO
+        CALL invfft ('Rho', psic_temp, dfftp)
+        DO ir = 1, dfftp%nnr
+          psic_temp (ir) = psic_temp (ir) * (vltot (ir) + v_har (ir, isk (ik)) + vxcr_2 (ir, isk (ik)) - vxcr (ir, isk (ik)))      !FZ:   v_h+ vltot | psi>
+        ENDDO
+        CALL fwfft ('Rho', psic_temp, dfftp)
+        !hpsi (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          hpsi_temp (ig) = psic_temp (dfftp%nl (igk_k(ig,ikk)))
+        ENDDO
+        DO ig = 1, npw                                  !FZ: calculate |k+G|^2 |psi>
+          hpsi (ig) = g2kin(ig) * psic (igk_k(ig,ikk))   !FZ: calculate |k+G|^2 |psi>
+        ENDDO                                           !FZ: calculate |k+G|^2 |psi>
+        psic (:) = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          psic (ig) = evc (ig, ib)      !FZ: 
+        ENDDO
+        !IF (exx_is_active ()) &
+        !   CALL vexx (npwx, npw, 1, psic, hpsi)
+        dummy = (0.0D0, 0.0D0)
+        DO ig = 1, npw
+          !dummy = dummy + conjg (psic (ig)) * hpsi (ig)
+          dummy = dummy + conjg (psic (ig)) * (hpsinl (ig, ib) + hpsi(ig) + hpsi_temp (ig))    !FZ: for IHK
+        ENDDO
+        dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+        CALL mp_sum (dummy, intra_bgrp_comm)
+        mtxeld (ib - diag_nmin + 1, ik) = dummy
+      ENDDO
+    ENDIF
+    !IF (noffdiag .GT. 0) THEN
+    !  DO ib = offdiag_nmin, offdiag_nmax
+    !    psic (:) = (0.0D0, 0.0D0)
+    !    hpsi (:) = (0.0D0, 0.0D0)  !FZ: added initialization
+    !    DO ig = 1, npw
+    !      psic (ig) = evc (ig, ib)  !FZ: for ekin
+    !    ENDDO
+    !    psic_temp (:) = (0.0D0, 0.0D0)
+    !    DO ig = 1, npw
+    !      psic_temp (dfftp%nl (igk_k(ig,ikk))) = evc (ig, ib)
+    !    ENDDO
+    !    CALL invfft ('Rho', psic_temp, dfftp)
+    !    DO ir = 1, dfftp%nnr
+    !      psic_temp (ir) = psic_temp (ir) * (vltot (ir) + v_har (ir, isk (ik)) + vxcr_2 (ir, isk (ik)) - vxcr (ir, isk (ik)))
+    !    ENDDO
+    !    CALL fwfft ('Rho', psic_temp, dfftp)
+    !    hpsi_temp (:) = (0.0D0, 0.0D0)
+    !    DO ig = 1, npw
+    !      hpsi_temp (ig) = psic_temp (dfftp%nl (igk_k (ig,ikk)))
+    !    ENDDO
+    !    !psic (:) = (0.0D0, 0.0D0)
+    !    !DO ig = 1, npw
+    !    !  psic (ig) = evc (ig, ib)
+    !    !ENDDO
+    !    DO ig = 1, npw                                  !FZ: calculate |k+G|^2 |psi>
+    !      hpsi (ig) = g2kin(ig) * psic (ig)   !FZ: calculate |k+G|^2 |psi>
+    !    ENDDO
+    !    psic (:) = (0.0D0, 0.0D0)
+    !    DO ig = 1, npw
+    !      psic (ig) = evc (ig, ib)
+    !    ENDDO
+    !    !IF (exx_is_active ()) &
+    !    !   CALL vexx (npwx, npw, 1, psic, hpsi)
+    !    DO ib2 = offdiag_nmin, offdiag_nmax
+    !      psic2 (:) = (0.0D0, 0.0D0)
+    !      DO ig = 1, npw
+    !        psic2 (ig) = evc (ig, ib2)
+    !      ENDDO
+    !      dummy = (0.0D0, 0.0D0)
+    !      DO ig = 1, npw
+    !        dummy = dummy + conjg (psic2 (ig)) * (hpsinl (ig, ib) + hpsi(ig) + hpsi_temp (ig)) !FZ: for nonlocal
+    !      ENDDO
+    !      dummy = dummy * CMPLX (rytoev, 0.0D0, KIND=dp)
+    !      CALL mp_sum (dummy, intra_bgrp_comm)
+    !      mtxelo (ib2 - offdiag_nmin + 1, ib - offdiag_nmin &
+    !        + 1, ik) = dummy
+    !    ENDDO
+    !  ENDDO
+    !ENDIF
+  ENDDO
+
+  DEALLOCATE (vxcr)
+  DEALLOCATE (vxcr_2)
+  DEALLOCATE (vxcr_nlcc)
+  DEALLOCATE (v_har)          !FZ: for metaGGA calculate hartree
+  DEALLOCATE (kedtaur)      !FZ: for metaGGA
+  DEALLOCATE (hpsi)
+  DEALLOCATE (hpsinl) !FZ: for nonlocal potential
+  DEALLOCATE (psinl)  !FZ: for nonlocal potential
+  DEALLOCATE (h_diag)  !FZ: for nonlocal
+  DEALLOCATE (s_diag)  !FZ: for nonlocal
+  !IF (noffdiag .GT. 0) DEALLOCATE (psic2)
+  CALL deallocate_bec_type ( becp )   !FZ: important! deallocate becp
+  DEALLOCATE (hpsi_temp)
+  DEALLOCATE (psic_temp)
+
+  IF (ndiag .GT. 0) CALL mp_sum (mtxeld, inter_pool_comm)
+  !IF (noffdiag .GT. 0) CALL mp_sum (mtxelo, inter_pool_comm)
+
+  CALL cryst_to_cart (nkstot, xk, at, -1)
+
+  IF (ionode) THEN
+    OPEN (unit = unit, file = TRIM (output_file_name), &
+      form = 'formatted', status = 'replace')
+    DO ik = 1, nkstot / nspin
+      WRITE (unit, 101) xk(:, ik), nspin * ndiag!, &   !FZ: commented
+        !nspin * noffdiag **2     !FZ: commented
+      DO is = 1, nspin
+        IF (ndiag .GT. 0) THEN
+          DO ib = diag_nmin, diag_nmax
+            WRITE (unit, 102) is, ib, et(ib, ik) * CMPLX (rytoev, 0.0D0, KIND=dp) - mtxeld &
+              (ib - diag_nmin + 1, ik + (is - 1) * nkstot / nspin)
+          ENDDO
+        ENDIF
+        !IF (noffdiag .GT. 0) THEN
+        !  DO ib = offdiag_nmin, offdiag_nmax
+        !    DO ib2 = offdiag_nmin, offdiag_nmax
+        !      WRITE (unit, 103) is, ib2, ib, mtxelo &
+        !        (ib2 - offdiag_nmin + 1, ib - offdiag_nmin + 1, &
+        !        ik + (is - 1) * nkstot / nspin)
+        !    ENDDO
+        !  ENDDO
+        !ENDIF
+      ENDDO
+    ENDDO
+    CLOSE (unit = unit, status = 'keep')
+  ENDIF
+
+  CALL cryst_to_cart (nkstot, xk, bg, 1)
+
+  IF (ndiag .GT. 0) DEALLOCATE (mtxeld)
+  !IF (noffdiag .GT. 0) DEALLOCATE (mtxelo)
+
+  RETURN
+
+  101 FORMAT (3F13.9, 1I8)   !FZ: changed from 2I8 to 1I8
+  102 FORMAT (2I8, 2F15.9)
+  103 FORMAT (3I8, 2F15.9)
+
+END SUBROUTINE write_vxc_hybrid
+
+!-------------------------------------------------------------------------------
+
+SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
+  offdiag_nmin, offdiag_nmax, vxc_zero_rho_core)
+
+  USE constants, ONLY : rytoev
+  USE cell_base, ONLY : tpiba2, at, bg
+  USE ener, ONLY : etxc, vtxc
+  USE exx, ONLY : vexx !,  local_thr, exxinit, vexx_pw2bgw !FZ: for hybrid functional added  local_thr, exxinit, vexx_pw2bgw
+  USE fft_base, ONLY : dfftp
+  USE fft_interfaces, ONLY : fwfft, invfft
+  !USE funct, ONLY : exx_is_active      !FZ: commented
+  USE funct, ONLY : exx_is_active, dft_is_meta, get_meta, dft_is_hybrid     !FZ: Added for metaGGA, Added dft_is_hybrid for hybrid functional
+  USE gvect, ONLY : ngm, g
+  USE io_files, ONLY : nwordwfc, iunwfc
+  USE io_global, ONLY : ionode
+  USE kinds, ONLY : DP
+  USE klist, ONLY : xk, nkstot, nks, ngk, igk_k
+  USE lsda_mod, ONLY : nspin, isk
+  USE mp, ONLY : mp_sum
+  USE mp_pools, ONLY : inter_pool_comm, intra_pool_comm  !FZ: added intra_pool_comm
+  USE mp_bands, ONLY : intra_bgrp_comm
+  USE mp_global,  ONLY : mp_startup   !FZ: added for Hybrid functional
   USE scf, ONLY : rho, rho_core, rhog_core
   USE wavefunctions, ONLY : evc, psic
   USE wvfct, ONLY : npwx, nbnd
+  !USE ions_base,          ONLY : nat, tau, ntyp => nsp, ityp, zv  !FZ: added for hybrid functional
+  !USE symm_base,          ONLY : nrot !FZ: added for hybrid functional
+  !USE noncollin_module,   ONLY : noncolin, npol, m_loc, i_cons, &   !FZ: for Hybrid functional
+  !                               angle1, angle2, bfield, ux, nspin_lsda, &   !FZ: for Hybrid functional
+  !                               nspin_gga, nspin_mag   !FZ: for Hybrid functional
+  !USE lsda_mod,           ONLY : lsda, nspin, current_spin, isk, &  !FZ: for Hybrid functional
+  !                               starting_magnetization  !FZ: for Hybrid functional
+  !USE exx_band,       ONLY : transform_psi_to_exx, transform_hpsi_to_local,&
+  !                             psi_exx, hpsi_exx, igk_exx !FZ: for Hybrid functional
+  !USE mp_exx,         ONLY : nproc_egrp, negrp, my_egrp_id, me_egrp, &  !FZ: for Hybrid functional
+  !                             intra_egrp_comm, inter_egrp_comm, &  !FZ: for Hybrid functional
+  !                             ibands, nibands, init_index_over_band, &  !FZ: for Hybrid functional
+  !                             iexx_istart, iexx_iend, max_ibands  !FZ: for Hybrid functional
 
   IMPLICIT NONE
 
@@ -3216,6 +4435,11 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
   real (DP), allocatable :: kedtaur (:, :)   !FZ: for metaGGA   kedtau: local K energy density,  kedtaur (in realspace)
   complex (DP), allocatable :: psic2 (:)
   complex (DP), allocatable :: hpsi (:)
+  !LOGICAL :: DoLoc        !FZ: for Hybrid functional
+  !LOGICAL  :: magnetic_sym, skip_equivalence=.FALSE.  !FZ: for Hybrid functional
+
+  !DoLoc = local_thr.gt.0.0d0   !FZ: for Hybrid functional
+  !ALLOCATE( m_loc( 3, nat ) )   !FZ: for Hybrid functional
 
   if(diag_nmin > diag_nmax) then
     call errore ( 'write_vxc_g', 'diag_nmin > diag_nmax', diag_nmin )
@@ -3265,11 +4489,12 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
     rhog_core ( : ) = ( 0.0D0, 0.0D0 )
   ENDIF
   !
+  !CALL set_rhoc()    !FZ: very important!!! for metaGGA, when it compute v_xc_meta, it needs core charge, here set_rhoc() compute core charge
   IF ( ionode ) WRITE (stdout, *) "dft_is_meta() = ", dft_is_meta(), "get_meta() = ", get_meta()    !FZ: test
   IF (dft_is_meta() .and. (get_meta() /= 4)) then         !FZ: for metaGGA
-     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, vxcr, kedtaur )    !FZ: for metaGGA
+     CALL v_xc_meta_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, vxcr, kedtaur )    !FZ: for metaGGA
   ELSE                            !FZ: for metaGGA
-     CALL v_xc (rho, rho_core, rhog_core, etxc, vtxc, vxcr)
+     CALL v_xc_pw2bgw (rho, rho_core, rhog_core, etxc, vtxc, vxcr)
   ENDIF                           !FZ: for metaGGA
   !
   IF ( ionode ) WRITE (stdout, '(" Test that stdout write_vxc_g is called")')    !FZ: test
@@ -3283,8 +4508,43 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
     OPEN (unit = unit, file = 'test_vxcr_output', &  !FZ: test
       form = 'formatted', status = 'replace')               !FZ: test
       WRITE (unit, *) "vxcr = ", vxcr  !FZ:  test
+      !WRITE (unit, *) "local_thr = ", local_thr  !FZ:  test
+      !WRITE (unit, *) "DoLoc = ", DoLoc  !FZ:  test
+      !WRITE (unit, *) "npol = ", npol  !FZ:  test
+      !WRITE (unit, *) "intra_pool_comm = ", intra_pool_comm  !FZ:  test
     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
   ENDIF                                       !FZ:  test
+ 
+  !CALL allocate_fft() 
+  !CALL init_run()
+  !CALL setup()
+  !IF ( nat==0 ) THEN
+  !   !
+  !   nsym=nrot
+  !   invsym=.true.
+  !   CALL inverse_s ( )
+  !   !
+  !ELSE
+  !   !
+  !   ! ... eliminate rotations that are not symmetry operations
+  !   !
+  !   CALL find_sym ( nat, tau, ityp, magnetic_sym, m_loc, gate )
+  !   !
+  !   ! ... do not force FFT grid to be commensurate with fractional translations
+  !   !
+  !   IF ( allfrac ) fft_fact(:) = 1
+  !   !
+  !END IF
+
+  !intra_pool_comm  = 0  ! intra pool communicator
+  !CALL mp_startup ( start_images=.true. )
+  !IF ( dft_is_hybrid() ) CALL reset_exx()
+  !CALL exxinit(DoLoc)     !FZ: for hybrid functional!!! 
+  !IF(allocated(hpsi_exx))DEALLOCATE(hpsi_exx)
+  !ALLOCATE(hpsi_exx(npwx*npol, max_ibands ))
+  ! zero hpsi_exx
+    !
+    !hpsi_exx = 0.d0
 
   DO ik = iks, ike
     ikk = ik - iks + 1
@@ -3306,6 +4566,8 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
             WRITE (unit, *) "dfftp%nl = ",dfftp%nl  !FZ:  test
             WRITE (unit, *) "psic (dfftp%nl (igk_k(ig,ikk))) = ",psic (dfftp%nl (igk_k(1,1)))  !FZ:  test
             WRITE (unit, *) "npw = ",npw  !FZ:  test
+            !WRITE (unit, *) "nibands = ",nibands  !FZ:  test
+            !WRITE (unit, *) "max_ibands = ",max_ibands  !FZ:  test
           CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
         ENDIF                                       !FZ:  test
         DO ir = 1, dfftp%nnr
@@ -3331,7 +4593,7 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
           psic (ig) = evc (ig, ib)
         ENDDO
         IF (exx_is_active ()) &
-           CALL vexx (npwx, npw, 1, psic, hpsi)
+           CALL vexx (npwx, npw, 1, psic, hpsi)  !FZ: for hybrid functional, changed vexx to vexx_pw2bgw
         dummy = (0.0D0, 0.0D0)
         DO ig = 1, npw
           dummy = dummy + conjg (psic (ig)) * hpsi (ig)
@@ -3376,7 +4638,7 @@ SUBROUTINE write_vxc_g (output_file_name, diag_nmin, diag_nmax, &
           psic (ig) = evc (ig, ib)
         ENDDO
         IF (exx_is_active ()) &
-           CALL vexx (npwx, npw, 1, psic, hpsi)
+           CALL vexx (npwx, npw, 1, psic, hpsi)   !FZ: for hybrid functional, changed vexx to vexx_pw2bgw 
         DO ib2 = offdiag_nmin, offdiag_nmax
           psic2 (:) = (0.0D0, 0.0D0)
           DO ig = 1, npw

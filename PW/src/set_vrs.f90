@@ -15,6 +15,7 @@ subroutine set_vrs (vrs, vltot, vr, kedtau, kedtaur,nrxx, nspin, doublegrid)
   USE kinds
   USE funct, only : dft_is_meta
   USE fft_base, only : dffts 
+  USE io_global, ONLY : stdout, ionode     !FZ: test
   implicit none
 
   integer :: nspin, nrxx
@@ -29,9 +30,38 @@ subroutine set_vrs (vrs, vltot, vr, kedtau, kedtaur,nrxx, nspin, doublegrid)
   logical :: doublegrid
   ! input: true if a doublegrid is used
   !
+  integer :: unit   !FZ: test
+  unit = 4      !FZ : test
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_set_vrs_output1', &          !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+      WRITE (unit, *) "doublegrid = ", doublegrid  !FZ:  test
+      WRITE (unit, *) "vrs = ", vrs  !FZ:  test
+      WRITE (unit, *) "vltot = ", vltot  !FZ:  test
+      WRITE (unit, *) "vr = ", vr  !FZ:  test
+    CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF                                          !FZ:  test
   CALL sum_vrs( nrxx, nspin, vltot, vr, vrs )
   !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_set_vrs_output2', &          !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+      WRITE (unit, *) "doublegrid = ", doublegrid  !FZ:  test
+      WRITE (unit, *) "vrs = ", vrs  !FZ:  test
+      WRITE (unit, *) "vltot = ", vltot  !FZ:  test
+      WRITE (unit, *) "vr = ", vr  !FZ:  test
+    CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF                                          !FZ:  test
   CALL interpolate_vrs( nrxx, nspin, doublegrid, kedtau, kedtaur, vrs )
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_set_vrs_output3', &          !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+      WRITE (unit, *) "doublegrid = ", doublegrid  !FZ:  test
+      WRITE (unit, *) "vrs = ", vrs  !FZ:  test
+      WRITE (unit, *) "vltot = ", vltot  !FZ:  test
+      WRITE (unit, *) "vr = ", vr  !FZ:  test
+    CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF                                          !FZ:  test
   ! 
   return
 

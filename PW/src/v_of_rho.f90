@@ -60,6 +60,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
      OPEN (unit = unit, file = 'test_v_of_rho_v%of_r_1', &  !FZ: test
        form = 'formatted', status = 'replace')               !FZ: test
     WRITE(unit, *)  "v%of_r = ", v%of_r    !FZ: test
+    WRITE(unit, *)  "v%kin_r = ", v%kin_r    !FZ: test
     CLOSE (unit = unit, status = 'keep')      !FZ:  test
   ENDIF                                       !FZ:  test
   IF (dft_is_meta() .and. (get_meta() /= 4)) then
@@ -220,6 +221,15 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   ! ... calculate the gradient of rho + rho_core in real space
   ! ... in LSDA case rhoout and rhogsum are defined in (up,down) format
   !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_output7', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "rho%of_g = ", rho%of_g !FZ:  test
+        WRITE (unit, *) "rho%of_r = ", rho%of_r !FZ:  test
+        WRITE (unit, *) "rhog_core = ", rhog_core !FZ:  test
+        WRITE (unit, *) "rho_core = ", rho_core !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
   DO is = 1, nspin
      !
      rhoout(:,is) =fac*rho_core(:)  + ( rho%of_r(:,1) + sgn(is)*rho%of_r(:,nspin) )*0.5D0
@@ -228,6 +238,13 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
      CALL fft_gradient_g2r( dfftp, rhogsum(1,is), g, grho(1,1,is) )
      !
   END DO
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_output6', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "rhogsum = ", rhogsum !FZ:  test
+        WRITE (unit, *) "grho = ", grho !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
   !
   do k = 1, dfftp%nnr
   
@@ -247,13 +264,14 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
         if ( (arho > eps8) .and. (grho2 (1) > eps12) .and. &
                                  (abs(atau) > eps8)) then
            
-           call tau_xc (arho, grho2(1),atau, ex, ec, v1x, v2x,v3x,v1c, v2c,v3c)
+           call tau_xc (arho, grho2(1),atau, ex, ec, v1x, v2x,v3x,v1c, v2c,v3c)   !FZ: !! grho is the input of this function, in read_file() the grho2 is different from directly call v_xc_meta() in pw2bgw, so we need to fix grho in pw2bgw when computing v_xc for metaGGA
            
            IF (ionode) THEN                                          !FZ: test
              OPEN (unit = unit, file = 'test_v_xc_meta_output', &  !FZ: test
                form = 'formatted', status = 'replace')               !FZ: test 
                  WRITE (unit, *) "arho = ", arho !FZ:  test
                  WRITE (unit, *) "atau = ", atau !FZ:  test
+                 WRITE (unit, *) "grho2 = ", grho2 !FZ:  test
                  WRITE (unit, *) "ex = ", ex, " ec = ", ec, "v1x = ", v1x, "v2x = ", v2x, "v3x = ", v3x !FZ:  test
                  WRITE (unit, *) "v1c = ", v1c, "v2c = ", v2c, "v3c = ", v3c !FZ:  test
               CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
@@ -351,6 +369,12 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
      end if
   end do
   !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_output5', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "v = ", v !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
   !
   ALLOCATE( dh( dfftp%nnr ) )    
   !
@@ -383,6 +407,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   IF (ionode) THEN                                          !FZ: test
     OPEN (unit = unit, file = 'test_v_xc_meta_output4', &  !FZ: test
       form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "v = ", v !FZ:  test
         WRITE (unit, *) " dft_is_nonlocc() = ", dft_is_nonlocc() !FZ:  test
         WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
@@ -394,9 +419,9 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   IF (ionode) THEN                                          !FZ: test
     OPEN (unit = unit, file = 'test_v_xc_meta_output3', &  !FZ: test
       form = 'formatted', status = 'replace')               !FZ: test
-        WRITE (unit, *) "v(:,1) = ", v(:, 1) !FZ:  test
-        WRITE (unit, *) "h(:, :,1) = ", h(:, :, 1) !FZ:  test
-        WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
+        WRITE (unit, *) "v = ", v !FZ:  test
+        !WRITE (unit, *) "h(:, :,1) = ", h(:, :, 1) !FZ:  test
+        !WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
   ENDIF        !FZ: test
   !
@@ -410,6 +435,297 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   RETURN
   !
 END SUBROUTINE v_xc_meta
+!----------------------------------------------------------------------------
+SUBROUTINE v_xc_meta_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
+  !----------------------------------------------------------------------------
+  !
+  ! ... Exchange-Correlation potential Vxc(r) from n(r)
+  !
+  USE kinds,            ONLY : DP
+  USE constants,        ONLY : e2, eps8
+  !USE io_global,        ONLY : stdout     !FZ: commented
+  USE io_files, ONLY : nwordwfc, iunwfc   !FZ: test
+  USE io_global, ONLY : stdout, ionode     !FZ: test
+  USE fft_base,         ONLY : dfftp
+  USE gvect,            ONLY : g, ngm           !FZ:  g
+  USE lsda_mod,         ONLY : nspin
+  USE cell_base,        ONLY : omega
+  USE spin_orb,         ONLY : domag
+  USE funct,            ONLY : xc, xc_spin, tau_xc, tau_xc_spin, get_meta, dft_is_nonlocc, nlc    !FZ: tau_xc, tau_xc_spin, get_meta
+  USE scf,              ONLY : scf_type
+  USE mp,               ONLY : mp_sum
+  USE mp_bands,         ONLY : intra_bgrp_comm
+  !
+  IMPLICIT NONE
+  !
+  TYPE (scf_type), INTENT(IN) :: rho
+  REAL(DP), INTENT(IN) :: rho_core(dfftp%nnr)
+    ! the core charge in real space
+  COMPLEX(DP), INTENT(IN) :: rhog_core(ngm)
+    ! the core charge in reciprocal space
+  REAL(DP), INTENT(INOUT) :: v(dfftp%nnr,nspin), kedtaur(dfftp%nnr,nspin), &
+                           vtxc, etxc
+    ! v:      V_xc potential
+    ! kedtau: local K energy density 
+    ! vtxc:   integral V_xc * rho
+    ! etxc:   E_xc energy
+    !
+    ! ... local variables
+    !
+  REAL(DP) :: zeta, rh, sgn(2)
+  INTEGER  :: k, ipol, is
+  REAL(DP) :: ex, ec, v1x, v2x, v3x,v1c, v2c, v3c,                     &
+  &           v1xup, v1xdw, v2xup, v2xdw, v1cup, v1cdw,                &
+  &           v3xup, v3xdw,v3cup, v3cdw,                               &
+  &           arho, atau, fac, rhoup, rhodw, ggrho2, tauup,taudw          
+       
+  REAL(DP), DIMENSION(2)   ::    grho2, rhoneg
+  REAL(DP), DIMENSION(3)   ::    grhoup, grhodw, v2cup, v2cdw
+  
+  !
+  REAL(DP),    ALLOCATABLE :: grho(:,:,:), h(:,:,:), dh(:)
+  REAL(DP),    ALLOCATABLE :: rhoout(:,:)
+  COMPLEX(DP), ALLOCATABLE :: rhogsum(:,:)
+  REAL(DP), PARAMETER      :: eps12 = 1.0d-12, zero=0._dp
+  integer :: unit   !FZ: test
+  unit = 4      !FZ : test
+  !
+  !----------------------------------------------------------------------------
+  !
+  !
+  CALL start_clock( 'v_xc_meta_pw2bgw' )
+  !
+  !
+  etxc      = zero
+  vtxc      = zero
+  v(:,:)    = zero
+  rhoneg(:) = zero
+  sgn(1) = 1._dp  ;   sgn(2) = -1._dp
+  fac = 1.D0 / DBLE( nspin ) 
+  !
+  ALLOCATE (grho(3,dfftp%nnr,nspin))
+  ALLOCATE (h(3,dfftp%nnr,nspin))
+  ALLOCATE (rhoout(dfftp%nnr,nspin))
+  ALLOCATE (rhogsum(ngm,nspin))
+  !
+  ! ... calculate the gradient of rho + rho_core in real space
+  ! ... in LSDA case rhoout and rhogsum are defined in (up,down) format
+  !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output7', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "rho%of_g = ", rho%of_g !FZ:  test
+        WRITE (unit, *) "rho%of_r = ", rho%of_r !FZ:  test
+        WRITE (unit, *) "rhog_core = ", rhog_core !FZ:  test
+        WRITE (unit, *) "rho_core = ", rho_core !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  DO is = 1, nspin
+     !
+     rhoout(:,is) =fac*rho_core(:)  + ( rho%of_r(:,1) + sgn(is)*rho%of_r(:,nspin) )*0.5D0
+     rhogsum(:,is)=fac*rhog_core(:) + ( rho%of_g(:,1) + sgn(is)*rho%of_g(:,nspin) )*0.5D0
+     !
+     CALL fft_gradient_g2r( dfftp, rhogsum(1,is), g, grho(1,1,is) )
+     !
+  END DO
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output6', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "rhogsum = ", rhogsum !FZ:  test
+        WRITE (unit, *) "grho = ", grho !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  !
+  do k = 1, dfftp%nnr
+  
+     do is = 1, nspin
+        grho2 (is) = grho(1,k, is)**2 + grho(2,k,is)**2 + grho(3,k, is)**2
+     end do
+     
+     if (nspin == 1) then
+        !
+        !    This is the spin-unpolarised case
+        !
+        arho = ABS (rho%of_r (k, 1) )
+
+        atau = rho%kin_r(k,1) / e2  ! kinetic energy density in Hartree
+       
+        
+        if ( (arho > eps8) .and. (grho2 (1) > eps12) .and. &
+                                 (abs(atau) > eps8)) then
+           
+           call tau_xc (arho, grho2(1),atau, ex, ec, v1x, v2x,v3x,v1c, v2c,v3c)
+           
+           IF (ionode) THEN                                          !FZ: test
+             OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output', &  !FZ: test
+               form = 'formatted', status = 'replace')               !FZ: test 
+                 WRITE (unit, *) "arho = ", arho !FZ:  test
+                 WRITE (unit, *) "atau = ", atau !FZ:  test
+                 WRITE (unit, *) "grho2 = ", grho2 !FZ:  test
+                 WRITE (unit, *) "ex = ", ex, " ec = ", ec, "v1x = ", v1x, "v2x = ", v2x, "v3x = ", v3x !FZ:  test
+                 WRITE (unit, *) "v1c = ", v1c, "v2c = ", v2c, "v3c = ", v3c !FZ:  test
+              CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+           ENDIF        !FZ: test
+           v(k, 1) =  (v1x + v1c )*e2 
+           
+           ! h contains D(rho*Exc)/D(|grad rho|) * (grad rho) / |grad rho|
+           h(:,k,1) =  (v2x + v2c)*grho (:,k,1) *e2
+           
+           kedtaur(k,1)=  (v3x + v3c) * 0.5d0 * e2
+           
+           etxc = etxc +  (ex + ec) *e2 !* segno
+           vtxc = vtxc + (v1x+v1c)*e2*arho
+
+           IF (ionode) THEN                                          !FZ: test
+             OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output2', &  !FZ: test
+               form = 'formatted', status = 'replace')               !FZ: test
+                 WRITE (unit, *) "v(k,1) = ", v(k, 1) !FZ:  test
+                 WRITE (unit, *) "grho(:, k , 1) = ", grho(:, k, 1) !FZ:  test
+                 WRITE (unit, *) "h(:, k,1) = ", h(:, k, 1) !FZ:  test
+                 WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
+              CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+           ENDIF        !FZ: test
+           
+        else  
+           h (:, k, 1) = zero  
+           kedtaur(k,1)= zero
+        end if
+        
+        if (rho%of_r (k, 1) < zero ) rhoneg(1) = rhoneg(1) - rho%of_r (k, 1)
+        
+     else
+        !
+        !    spin-polarised case
+        !
+        rhoup = ( rho%of_r(k, 1) + rho%of_r(k, 2) )*0.5d0
+        rhodw = ( rho%of_r(k, 2) - rho%of_r(k, 2) )*0.5d0
+        
+        rh   = rhoup + rhodw 
+        
+        do ipol=1,3
+            grhoup(ipol)=grho(ipol,k,1)
+            grhodw(ipol)=grho(ipol,k,2)
+        end do
+        
+        ggrho2  = ( grho2 (1) + grho2 (2) ) * 4._dp
+        
+        tauup = rho%kin_r(k,1) / e2
+        taudw = rho%kin_r(k,2) / e2
+        atau  = tauup + taudw
+
+        if ((rh > eps8) .and. (ggrho2 > eps12) .and. (abs(atau) > eps8) ) then
+                
+        call tau_xc_spin (rhoup, rhodw, grhoup, grhodw, tauup, taudw, ex, ec, &
+                      v1xup, v1xdw, v2xup, v2xdw, v3xup, v3xdw, v1cup, v1cdw, &
+                      v2cup, v2cdw, v3cup, v3cdw ) 
+          !
+          ! first term of the gradient correction : D(rho*Exc)/D(rho)
+          !
+          v(k, 1) =  (v1xup + v1cup)*e2
+          v(k, 2) =  (v1xdw + v1cdw)*e2
+          !
+          ! h contains D(rho*Exc)/D(|grad rho|) * (grad rho) / |grad rho|
+          !
+          if (get_meta()==1 .OR. get_meta()==5 ) then  ! tpss, scan
+            !
+            h(:,k,1) = (v2xup * grhoup(:) + v2cup(:)) * e2
+            h(:,k,2) = (v2xdw * grhodw(:) + v2cdw(:)) * e2
+            !
+          else
+            !
+            h(:,k,1) = (v2xup + v2cup(1)) * grhoup(:) * e2
+            h(:,k,2) = (v2xdw + v2cdw(1)) * grhodw(:) * e2
+            !
+          end if
+          !
+          kedtaur(k,1)=  (v3xup + v3cup) * 0.5d0 * e2
+          kedtaur(k,2)=  (v3xdw + v3cdw) * 0.5d0 * e2
+          !
+          etxc = etxc + (ex + ec) * e2
+          vtxc = vtxc + (v1xup+v1cup+v1xdw+v1cdw) * e2 * rh
+          !
+        else
+          h(:,k,1) = zero
+          h(:,k,2) = zero
+          !
+          kedtaur(k,1)=  zero
+          kedtaur(k,2)=  zero
+
+        end if
+        
+        if (rhoup < zero ) rhoneg(1) = rhoneg(1) - rhoup
+        if (rhodw < zero ) rhoneg(2) = rhoneg(2) - rhodw
+        
+     end if
+  end do
+  !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output5', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "v = ", v !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  !
+  ALLOCATE( dh( dfftp%nnr ) )    
+  !
+  ! ... second term of the gradient correction :
+  ! ... \sum_alpha (D / D r_alpha) ( D(rho*Exc)/D(grad_alpha rho) )
+  !
+  DO is = 1, nspin
+     !
+     CALL fft_graddot( dfftp, h(1,1,is), g, dh )
+     !
+     v(:,is) = v(:,is) - dh(:)
+     !
+     rhoout(:,is)=rhoout(:,is)-fac*rho_core(:)
+     vtxc = vtxc - SUM( dh(:) * rhoout(:,is) )
+     !
+  END DO
+  DEALLOCATE(dh)
+  !
+  call mp_sum ( rhoneg, intra_bgrp_comm )
+  !
+  rhoneg(:) = rhoneg(:) * omega / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+  !
+  if ((rhoneg(1) > eps8) .or. (rhoneg(2) > eps8)) then
+    write (stdout, '(/,5x, "negative rho (up,down): ", 2es10.3)') rhoneg(:)
+  end if
+  !
+  vtxc = omega * vtxc / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 ) 
+  etxc = omega * etxc / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+  !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output4', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "v = ", v !FZ:  test
+        WRITE (unit, *) " dft_is_nonlocc() = ", dft_is_nonlocc() !FZ:  test
+        WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  IF ( dft_is_nonlocc() ) CALL nlc( rho%of_r, rho_core, nspin, etxc, vtxc, v )
+  !
+  CALL mp_sum(  vtxc , intra_bgrp_comm )
+  CALL mp_sum(  etxc , intra_bgrp_comm )
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_meta_pw2bgw_output3', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "v = ", v !FZ:  test
+        !WRITE (unit, *) "h(:, :,1) = ", h(:, :, 1) !FZ:  test
+        !WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  !
+  DEALLOCATE(grho)
+  DEALLOCATE(h)
+  DEALLOCATE(rhoout)
+  DEALLOCATE(rhogsum)
+  !
+  CALL stop_clock( 'v_xc_meta_pw2bgw' )
+  !
+  RETURN
+  !
+END SUBROUTINE v_xc_meta_pw2bgw
+!----------------------------------------------------------------------------
 !
 SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !----------------------------------------------------------------------------
@@ -626,6 +942,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
     OPEN (unit = unit, file = 'test_v_xc_output4', &  !FZ: test
       form = 'formatted', status = 'replace')               !FZ: test
         WRITE (unit, *) "dft_is_nonlocc() = ", dft_is_nonlocc() !FZ:  test
+        WRITE (unit, *) "v = ", v !FZ:  test
         WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
         WRITE (unit, *) "intra_bgrp_comm = ", intra_bgrp_comm !FZ:  test
      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
@@ -638,7 +955,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   IF (ionode) THEN                                          !FZ: test
     OPEN (unit = unit, file = 'test_v_xc_output3', &  !FZ: test
       form = 'formatted', status = 'replace')               !FZ: test
-        WRITE (unit, *) "v(:,1) = ", v(:, 1) !FZ:  test
+        WRITE (unit, *) "v = ", v !FZ:  test
         WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
   ENDIF        !FZ: test
@@ -648,6 +965,234 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !
 END SUBROUTINE v_xc
 !
+SUBROUTINE v_xc_pw2bgw( rho, rho_core, rhog_core, etxc, vtxc, v )
+  !----------------------------------------------------------------------------
+  !
+  ! ... Exchange-Correlation potential Vxc(r) from n(r)
+  !
+  USE kinds,            ONLY : DP
+  USE constants,        ONLY : e2, eps8
+  !USE io_global,        ONLY : stdout   !FZ: commented
+  USE io_files, ONLY : nwordwfc, iunwfc   !FZ: test
+  USE io_global, ONLY : stdout, ionode     !FZ: test
+  USE fft_base,         ONLY : dfftp
+  USE gvect,            ONLY : ngm
+  USE lsda_mod,         ONLY : nspin
+  USE cell_base,        ONLY : omega
+  USE spin_orb,         ONLY : domag
+  USE funct,            ONLY : xc, xc_spin, nlc, dft_is_nonlocc
+  USE scf,              ONLY : scf_type
+  USE mp_bands,         ONLY : intra_bgrp_comm
+  USE mp,               ONLY : mp_sum
+
+  !
+  IMPLICIT NONE
+  !
+  TYPE (scf_type), INTENT(INOUT) :: rho
+  REAL(DP), INTENT(IN) :: rho_core(dfftp%nnr)
+    ! the core charge
+  COMPLEX(DP), INTENT(IN) :: rhog_core(ngm)
+    ! input: the core charge in reciprocal space
+  REAL(DP), INTENT(OUT) :: v(dfftp%nnr,nspin), vtxc, etxc
+    ! V_xc potential
+    ! integral V_xc * rho
+    ! E_xc energy
+  !
+  ! ... local variables
+  !
+  REAL(DP) :: rhox, arhox, zeta, amag, vs, ex, ec, vx(2), vc(2), rhoneg(2)
+    ! the total charge in each point
+    ! the absolute value of the charge
+    ! the absolute value of the charge
+    ! local exchange energy
+    ! local correlation energy
+    ! local exchange potential
+    ! local correlation potential
+  INTEGER :: ir, ipol
+    ! counter on mesh points
+    ! counter on nspin
+  !
+  REAL(DP), PARAMETER :: vanishing_charge = 1.D-10, &
+                         vanishing_mag    = 1.D-20
+  !
+  integer :: unit   !FZ: test
+  unit = 4      !FZ : test
+  !
+  CALL start_clock( 'v_xc_pw2bgw' )
+  !
+  etxc   = 0.D0
+  vtxc   = 0.D0
+  v(:,:) = 0.D0
+  rhoneg = 0.D0
+  !
+  IF ( nspin == 1 .OR. ( nspin == 4 .AND. .NOT. domag ) ) THEN
+     !
+     ! ... spin-unpolarized case
+     !
+!$omp parallel do private( rhox, arhox, ex, ec, vx, vc ), &
+!$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)
+     DO ir = 1, dfftp%nnr
+        !
+        rhox = rho%of_r(ir,1) + rho_core(ir)
+        !
+        arhox = ABS( rhox )
+        !
+        IF ( arhox > vanishing_charge ) THEN
+           !
+           CALL xc( arhox, ex, ec, vx(1), vc(1) )
+           !
+           v(ir,1) = e2*( vx(1) + vc(1) )
+           !
+           etxc = etxc + e2*( ex + ec ) * rhox
+           !
+           vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
+           !
+        ENDIF
+        !
+        IF ( rho%of_r(ir,1) < 0.D0 ) rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+        !
+     END DO
+!$omp end parallel do
+     !
+  ELSE IF ( nspin == 2 ) THEN
+     !
+     ! ... spin-polarized case
+     !
+!$omp parallel do private( rhox, arhox, zeta, ex, ec, vx, vc ), &
+!$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)
+     DO ir = 1, dfftp%nnr
+        !
+        rhox = rho%of_r(ir,1) + rho_core(ir)
+        !
+        IF ( rho%of_r(ir,1) < 0.D0 )  rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+        !
+        arhox = ABS( rhox )
+        !
+        IF ( arhox > vanishing_charge ) THEN
+           !
+           zeta = rho%of_r(ir,2) / arhox
+           !
+           IF ( ABS( zeta ) > 1.D0 ) THEN
+              !
+              rhoneg(2) = rhoneg(2) + 1.D0 / omega
+              !
+              zeta = SIGN( 1.D0, zeta )
+              !
+           END IF
+           !
+           CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
+           !
+           v(ir,:) = e2*( vx(:) + vc(:) )
+           !
+           etxc = etxc + e2*( ex + ec ) * rhox
+           !
+           vtxc = vtxc + ( ( v(ir,1) + v(ir,2) )*rho%of_r(ir,1) + &
+                           ( v(ir,1) - v(ir,2) )*rho%of_r(ir,2)  )
+           !
+        END IF
+        !
+     END DO
+!$omp end parallel do
+     !
+     vtxc = 0.5d0 * vtxc
+     !
+  ELSE IF ( nspin == 4 ) THEN
+     !
+     ! ... noncolinear case
+     !
+     DO ir = 1,dfftp%nnr
+        !
+        amag = SQRT( rho%of_r(ir,2)**2 + rho%of_r(ir,3)**2 + rho%of_r(ir,4)**2 )
+        !
+        rhox = rho%of_r(ir,1) + rho_core(ir)
+        !
+        IF ( rho%of_r(ir,1) < 0.D0 )  rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+        !
+        arhox = ABS( rhox )
+        !
+        IF ( arhox > vanishing_charge ) THEN
+           !
+           zeta = amag / arhox
+           !
+           IF ( ABS( zeta ) > 1.D0 ) THEN
+              !
+              rhoneg(2) = rhoneg(2) + 1.D0 / omega
+              !
+              zeta = SIGN( 1.D0, zeta )
+              !
+           END IF
+           !
+           CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
+           !
+           vs = 0.5D0*( vx(1) + vc(1) - vx(2) - vc(2) )
+           !
+           v(ir,1) = e2*( 0.5D0*( vx(1) + vc(1) + vx(2) + vc(2 ) ) )
+           !
+           IF ( amag > vanishing_mag ) THEN
+              !
+              DO ipol = 2, 4
+                 !
+                 v(ir,ipol) = e2 * vs * rho%of_r(ir,ipol) / amag
+                 !
+                 vtxc = vtxc + v(ir,ipol) * rho%of_r(ir,ipol)
+                 !
+              END DO
+              !
+           END IF
+           !
+           etxc = etxc + e2*( ex + ec ) * rhox
+           vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
+           !
+        END IF
+        !
+     END DO
+     !
+  END IF
+  !
+  CALL mp_sum(  rhoneg , intra_bgrp_comm )
+  !
+  rhoneg(:) = rhoneg(:) * omega / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+  !
+  IF ( rhoneg(1) > eps8 .OR. rhoneg(2) > eps8 ) &
+     WRITE( stdout,'(/,5X,"negative rho (up, down): ",2ES10.3)') rhoneg
+  !
+  ! ... energy terms, local-density contribution
+  !
+  vtxc = omega * vtxc / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+  etxc = omega * etxc / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+  !
+  ! ... add gradient corrections (if any)
+  !
+  CALL gradcorr( rho%of_r, rho%of_g, rho_core, rhog_core, etxc, vtxc, v )
+  !
+  ! ... add non local corrections (if any)
+  !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_pw2bgw_output4', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "dft_is_nonlocc() = ", dft_is_nonlocc() !FZ:  test
+        WRITE (unit, *) "v = ", v !FZ:  test
+        WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
+        WRITE (unit, *) "intra_bgrp_comm = ", intra_bgrp_comm !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  IF ( dft_is_nonlocc() ) CALL nlc( rho%of_r, rho_core, nspin, etxc, vtxc, v )
+  !
+  CALL mp_sum(  vtxc , intra_bgrp_comm )
+  CALL mp_sum(  etxc , intra_bgrp_comm )
+  !
+  IF (ionode) THEN                                          !FZ: test
+    OPEN (unit = unit, file = 'test_v_xc_pw2bgw_output3', &  !FZ: test
+      form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "v = ", v !FZ:  test
+        WRITE (unit, *) "etxc = ", etxc, "vtxc = ", vtxc !FZ:  test
+     CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+  ENDIF        !FZ: test
+  CALL stop_clock( 'v_xc_pw2bgw' )
+  !
+  RETURN
+  !
+END SUBROUTINE v_xc_pw2bgw
 !----------------------------------------------------------------------------
 SUBROUTINE v_h_only( rhog, ehart, charge, v )  !FZ: all function is for metaGGA !! Because only v_xc and v_xc_meta
 !FZ: function has intialized v(:,:) as zero, when calling v_h() it only adds Hartree potential to the v(:,:)
@@ -691,6 +1236,7 @@ SUBROUTINE v_h_only( rhog, ehart, charge, v )  !FZ: all function is for metaGGA 
   ALLOCATE( aux( dfftp%nnr ), aux1( 2, ngm ) )
   charge = 0.D0
   v(:,:) = 0.D0             !FZ: for metaGGA
+  !v(:,:) = 0._dp             !FZ: for metaGGA
   !
   IF ( gstart == 2 ) THEN
      !

@@ -116,6 +116,7 @@ MODULE exx
     USE control_flags,ONLY : tqr
     USE realus,       ONLY : qpointlist, tabxx, tabp
     USE exx_band,     ONLY : smap_exx
+    USE io_global, ONLY : ionode  !FZ: test
 
     IMPLICIT NONE
     INTEGER :: ik, ngmt
@@ -123,6 +124,20 @@ MODULE exx
     INTEGER, EXTERNAL :: n_plane_waves
     REAL(dp) :: gkcut, gcutmt
     LOGICAL :: lpara
+    integer :: unit  !FZ: test
+    unit = 4
+    
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_fft_create', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "dfftt%nr1 = ", dfftt%nr1  !FZ:  test
+        WRITE (unit, *) "dfftt%nr2 = ", dfftt%nr2  !FZ:  test
+        WRITE (unit, *) "dfftt%nr3 = ", dfftt%nr3  !FZ:  test
+        WRITE (unit, *) "negrp = ", negrp  !FZ:  test
+        WRITE (unit, *) "fft_fact = ", fft_fact  !FZ:  test
+        WRITE (unit, *) "nyfft = ", nyfft  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
 
     IF( exx_fft_initialized) RETURN
     !
@@ -758,10 +773,12 @@ MODULE exx
     USE uspp,           ONLY : okvan
     USE paw_variables,  ONLY : okpaw
     USE us_exx,         ONLY : becxx
-    USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band
+    USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band, &
+                               max_ibands  !FZ: added for pw2bgw  
     USE wvfct,          ONLY : nbnd
     USE exx_band,       ONLY : transform_psi_to_exx, transform_hpsi_to_local,&
                                psi_exx, hpsi_exx, igk_exx
+    USE io_global, ONLY : stdout, ionode     !FZ: test
     !
     IMPLICIT NONE
     !
@@ -770,22 +787,47 @@ MODULE exx
     COMPLEX(DP)              :: hpsi(lda*npol,m)
     TYPE(bec_type), OPTIONAL :: becpsi
     INTEGER :: i
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
     !
     IF ( (okvan.or.okpaw) .and. .not. present(becpsi)) &
        CALL errore('vexx','becpsi needed for US/PAW case',1)
     CALL start_clock ('vexx')
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi0', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+        WRITE (unit, *) "hpsi_exx = ", hpsi_exx  !FZ:  test
+        WRITE (unit, *) "npol = ", npol  !FZ:  test
+        WRITE (unit, *) "max_ibands = ", max_ibands  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     IF(negrp.gt.1)THEN
        CALL init_index_over_band(inter_egrp_comm,nbnd,m)
        !
        ! transform psi to the EXX data structure
        !
+       IF (ionode) THEN                                          !FZ: test
+         OPEN (unit = unit, file = 'test_vexx_hpsi0.5', &          !FZ: test
+           form = 'formatted', status = 'replace')               !FZ: test
+           WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+         CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+       ENDIF !FZ: test
        CALL transform_psi_to_exx(lda,n,m,psi)
        !
     END IF
     !
     ! calculate the EXX contribution to hpsi
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi1', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+        WRITE (unit, *) "negrp = ", negrp  !FZ:  test
+        WRITE (unit, *) "hpsi_exx = ", hpsi_exx  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     IF(gamma_only) THEN
        IF(negrp.eq.1)THEN
           CALL vexx_gamma(lda, n, m, psi, hpsi, becpsi)
@@ -800,6 +842,12 @@ MODULE exx
        END IF
     ENDIF
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi2', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     IF(negrp.gt.1)THEN
        !
        ! transform hpsi to the local data structure
@@ -807,11 +855,178 @@ MODULE exx
        CALL transform_hpsi_to_local(lda,n,m,hpsi)
        !
     END IF
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi3', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     CALL stop_clock ('vexx')
     !
     !-----------------------------------------------------------------------
   END SUBROUTINE vexx
+  !-----------------------------------------------------------------------
+  !-----------------------------------------------------------------------
+  SUBROUTINE vexx_pw2bgw(lda, n, m, psi, hpsi, becpsi)   !FZ: function is for pw2bgw calculate vexx
+  !-----------------------------------------------------------------------
+    !
+    ! ... Wrapper routine computing V_x\psi, V_x = exchange potential
+    ! ... Calls generic version vexx_k or Gamma-specific one vexx_gamma
+    !
+    ! ... input:
+    ! ...    lda   leading dimension of arrays psi and hpsi
+    ! ...    n     true dimension of psi and hpsi
+    ! ...    m     number of states psi
+    ! ...    psi   m wavefunctions
+    ! ..     becpsi <beta|psi>, optional but needed for US and PAW case
+    !
+    ! ... output:
+    ! ...    hpsi  V_x*psi
+    !
+    USE becmod,         ONLY : bec_type
+    USE uspp,           ONLY : okvan
+    USE paw_variables,  ONLY : okpaw
+    USE us_exx,         ONLY : becxx
+    USE mp_exx,         ONLY : negrp, inter_egrp_comm, init_index_over_band, &
+                               max_ibands, nibands, ibands, egrp_pairs, contributed_bands, max_pairs, nibands  !FZ: added for pw2bgw
+    USE wvfct,          ONLY : nbnd
+    USE exx_band,       ONLY : transform_psi_to_exx, transform_hpsi_to_local,&
+                               psi_exx, hpsi_exx, igk_exx
+    USE io_global, ONLY : stdout, ionode     !FZ: test
+    USE wvfct, ONLY : npwx, nbnd  !FZ: for pw2bgw
+    !
+    IMPLICIT NONE
+    !
+    INTEGER                  :: lda, n, m
+    COMPLEX(DP)              :: psi(lda*npol,m)
+    COMPLEX(DP)              :: hpsi(lda*npol,m)
+    TYPE(bec_type), OPTIONAL :: becpsi
+    INTEGER :: i
+    INTEGER :: iegrp   !FZ: added for pw2bgw
+    INTEGER :: ibnd, npairs, ipair  !FZ: added 
+    INTEGER :: n_underloaded ! number of band groups that are under max load
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
+    !
+    max_ibands = CEILING(DBLE(nbnd)/DBLE(negrp))+2  !FZ: for pw2bgw
+    IF(allocated(hpsi_exx))DEALLOCATE(hpsi_exx)   !FZ: for pw2bgw
+    ALLOCATE(hpsi_exx(npwx*npol, max_ibands ))    !FZ: for pw2bgw
+    max_pairs = CEILING(REAL(nbnd*m)/REAL(negrp))
+    n_underloaded = MODULO(max_pairs*negrp-nbnd*m,negrp)
+    IF (allocated(egrp_pairs)) THEN
+       !DEALLOCATE(egrp_pairs)
+       !DEALLOCATE(band_roots)
+       DEALLOCATE(contributed_bands)
+       DEALLOCATE(nibands)
+       DEALLOCATE(ibands)
+    END IF
+    IF (.not.allocated(egrp_pairs)) THEN
+       !ALLOCATE(egrp_pairs(2,max_pairs,negrp))
+       !ALLOCATE(band_roots(m))
+       ALLOCATE(contributed_bands(nbnd,negrp))
+       ALLOCATE(nibands(negrp))
+       ALLOCATE(ibands(nbnd,negrp))
+    END IF
+    contributed_bands = .FALSE.
+    DO iegrp=1, negrp
+       npairs = max_pairs
+       IF (iegrp.le.n_underloaded) npairs = npairs - 1
+       DO ipair=1, npairs
+          contributed_bands(egrp_pairs(1,ipair,iegrp),iegrp) = .TRUE.
+       END DO
+    END DO
+    nibands = 0
+    ibands = 0
+    DO iegrp=1, negrp
+       DO i=1, nbnd
+          IF (contributed_bands(i,iegrp)) THEN
+             nibands(iegrp) = nibands(iegrp) + 1
+             ibands(nibands(iegrp),iegrp) = i
+          END IF
+       END DO
+    END DO
+
+    hpsi_exx = 0.d0   !FZ: for pw2bgw
+
+    IF ( (okvan.or.okpaw) .and. .not. present(becpsi)) &
+       CALL errore('vexx_pw2bgw','becpsi needed for US/PAW case',1)
+    CALL start_clock ('vexx_pw2bgw')
+    !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_pw2bgw_hpsi0', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+        WRITE (unit, *) "hpsi_exx = ", hpsi_exx  !FZ:  test
+        WRITE (unit, *) "npwx = ", npwx  !FZ:  test
+        WRITE (unit, *) "npol = ", npol  !FZ:  test
+        WRITE (unit, *) "nbnd = ", nbnd  !FZ:  test
+        WRITE (unit, *) "max_ibands = ", max_ibands  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
+    IF(negrp.gt.1)THEN
+       CALL init_index_over_band(inter_egrp_comm,nbnd,m)
+       !
+       ! transform psi to the EXX data structure
+       !
+       IF (ionode) THEN                                          !FZ: test
+         OPEN (unit = unit, file = 'test_vexx_pw2bgw_hpsi0.5', &          !FZ: test
+           form = 'formatted', status = 'replace')               !FZ: test
+           WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+         CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+       ENDIF !FZ: test
+       CALL transform_psi_to_exx(lda,n,m,psi)
+       !
+    END IF
+    !
+    ! calculate the EXX contribution to hpsi
+    !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_pw2bgw_hpsi1', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+        WRITE (unit, *) "negrp = ", negrp  !FZ:  test
+        WRITE (unit, *) "hpsi_exx = ", hpsi_exx  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
+    IF(gamma_only) THEN
+       IF(negrp.eq.1)THEN
+          CALL vexx_gamma(lda, n, m, psi, hpsi, becpsi)
+       ELSE
+          CALL vexx_gamma(lda, n, m, psi_exx, hpsi_exx, becpsi)
+       END IF
+    ELSE
+       IF(negrp.eq.1)THEN
+          CALL vexx_k(lda, n, m, psi, hpsi, becpsi)
+       ELSE
+          CALL vexx_k(lda, n, m, psi_exx, hpsi_exx, becpsi)
+       END IF
+    ENDIF
+    !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_pw2bgw_hpsi2', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
+    IF(negrp.gt.1)THEN
+       !
+       ! transform hpsi to the local data structure
+       !
+       CALL transform_hpsi_to_local(lda,n,m,hpsi)
+       !
+    END IF
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_pw2bgw_hpsi3', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
+    !
+    CALL stop_clock ('vexx_pw2bgw')
+    !
+    !-----------------------------------------------------------------------
+  END SUBROUTINE vexx_pw2bgw
   !-----------------------------------------------------------------------
   !
   !-----------------------------------------------------------------------
@@ -842,6 +1057,7 @@ MODULE exx
     USE exx_base,       ONLY : nqs, index_xkq, index_xk, xkq_collect, &
          coulomb_fac, g2_convolution_all
     USE exx_band,       ONLY : result_sum, igk_exx
+    USE io_global, ONLY : stdout, ionode     !FZ: test
     !
     !
     IMPLICIT NONE
@@ -876,6 +1092,8 @@ MODULE exx
     INTEGER :: iegrp, wegrp
     INTEGER :: exxbuff_index
     INTEGER :: ending_im
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
     !
     ialloc = nibands(my_egrp_id+1)
     !
@@ -889,10 +1107,22 @@ MODULE exx
     !
     ALLOCATE( vc(nrxxs,ialloc))
     IF(okvan) ALLOCATE(deexx(nkb,ialloc))
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi3.1', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     current_ik = global_kpoint_index ( nkstot, current_k )
     xkp = xk(:,current_k)
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi3.2', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     allocate(big_result(n,m))
     big_result = 0.0_DP
     result = 0.0_DP
@@ -903,6 +1133,12 @@ MODULE exx
     !
     ! Here the loops start
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi4', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     INTERNAL_LOOP_ON_Q : &
     DO iq=1,nqs
        !
@@ -1112,6 +1348,12 @@ MODULE exx
        IF ( okvan .and..not.tqr ) CALL qvan_clean ()
     ENDDO &
     INTERNAL_LOOP_ON_Q
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi5', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     DO ii=1, nibands(my_egrp_id+1)
        !
@@ -1191,7 +1433,8 @@ MODULE exx
     USE exx_base,       ONLY : nqs, xkq_collect, index_xkq, index_xk, &
          coulomb_fac, g2_convolution_all
     USE exx_band,       ONLY : result_sum, igk_exx
-    USE io_global,      ONLY : stdout
+    !USE io_global,      ONLY : stdout   !FZ: commented
+    USE io_global, ONLY : stdout, ionode     !FZ: test
     !
     !
     IMPLICIT NONE
@@ -1238,12 +1481,37 @@ MODULE exx
     INTEGER :: ialloc, ending_im
     INTEGER :: ijt, njt, jblock_start, jblock_end
     INTEGER :: iegrp, wegrp
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_3.0', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+        WRITE (unit, *) "nibands = ", nibands  !FZ:  test
+        WRITE (unit, *) "negrp = ", negrp  !FZ:  test
+        WRITE (unit, *) "my_egrp_id = ", my_egrp_id  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     ialloc = nibands(my_egrp_id+1)
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_3.0.1', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+        WRITE (unit, *) "ialloc = ", ialloc  !FZ:  test
+        WRITE (unit, *) "my_egrp_id = ", my_egrp_id  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     ALLOCATE( fac(dfftt%ngm) )
     nrxxs= dfftt%nnr
     ALLOCATE( facb(nrxxs) )
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_3.1', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     IF (noncolin) THEN
        ALLOCATE( temppsic_nc(nrxxs,npol,ialloc), result_nc(nrxxs,npol,ialloc) )
@@ -1251,6 +1519,12 @@ MODULE exx
        ALLOCATE( temppsic(nrxxs,ialloc), result(nrxxs,ialloc) )
     ENDIF
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_3.2', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     IF(okvan) ALLOCATE(deexx(nkb,ialloc))
     !
     current_ik = global_kpoint_index ( nkstot, current_k )
@@ -1266,6 +1540,12 @@ MODULE exx
     pvc(1:nrxxs*jblock) => vc(:,:)
 #endif
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_4', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     DO ii=1, nibands(my_egrp_id+1)
        !
        ibnd = ibands(ii,my_egrp_id+1)
@@ -1325,6 +1605,12 @@ MODULE exx
     !precompute these guys
     omega_inv = 1.0 / omega
     nqs_inv = 1.0 / nqs
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_5', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     !------------------------------------------------------------------------!
     ! Beginning of main loop
@@ -1530,6 +1816,12 @@ MODULE exx
     END DO
     !
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_6', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     DO ii=1, nibands(my_egrp_id+1)
        !
@@ -1563,6 +1855,12 @@ MODULE exx
        !
     END DO
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_7', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !deallocate temporary arrays
     DEALLOCATE(rhoc, vc)
     !
@@ -1598,6 +1896,12 @@ MODULE exx
        END IF
     END IF
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_vexx_hpsi_k_8', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "hpsi = ", hpsi  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     IF (noncolin) THEN
        DEALLOCATE(temppsic_nc, result_nc)
     ELSE

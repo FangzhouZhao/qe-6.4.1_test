@@ -73,6 +73,7 @@ CONTAINS
     ! ...           parent_comm, typically processors of a k-point pool
     ! ...           (intra_pool_comm)
     !
+    USE io_global, ONLY : stdout, ionode     !FZ: test
     IMPLICIT NONE
     !
     INTEGER, INTENT(IN) :: nband_, parent_comm
@@ -80,6 +81,16 @@ CONTAINS
     !
     INTEGER :: parent_nproc = 1, parent_mype = 0
     !
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_mp_start_exx_0', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "nband_ = ", nband_  !FZ:  test
+        WRITE (unit, *) "parent_comm = ", parent_comm  !FZ:  test
+        WRITE (unit, *) "ntg_ = ", ntg_  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
 #if defined (__MPI)
     !
     parent_nproc = mp_size( parent_comm )
@@ -89,6 +100,14 @@ CONTAINS
     ! ... by a call to routine get_command_line
     !
     negrp = nband_
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_mp_start_exx_1', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "negrp = ", negrp  !FZ:  test
+        WRITE (unit, *) "parent_comm = ", parent_comm  !FZ:  test
+        WRITE (unit, *) "ntg_ = ", ntg_  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     !
     IF ( negrp < 1 .OR. negrp > parent_nproc ) CALL errore( 'mp_start_bands',&
                           'invalid number of band groups, out of range', 1 )
@@ -135,6 +154,19 @@ CONTAINS
        intra_bgrp_comm = intra_egrp_comm
        negrp = 1
     END IF
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_mp_start_exx_2', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "negrp = ", negrp  !FZ:  test
+        WRITE (unit, *) "nbgrp = ", nbgrp  !FZ:  test
+        WRITE (unit, *) "inter_egrp_comm = ", inter_egrp_comm  !FZ:  test
+        WRITE (unit, *) "inter_bgrp_comm = ", inter_bgrp_comm  !FZ:  test
+        WRITE (unit, *) "intra_egrp_comm = ", intra_egrp_comm  !FZ:  test
+        WRITE (unit, *) "intra_bgrp_comm = ", intra_bgrp_comm  !FZ:  test
+        WRITE (unit, *) "parent_comm = ", parent_comm  !FZ:  test
+        WRITE (unit, *) "ntg_ = ", ntg_  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
 #endif
     RETURN
     !
@@ -142,7 +174,8 @@ CONTAINS
   !
   SUBROUTINE init_index_over_band(comm,nbnd,m)
     !
-    USE io_global, ONLY : stdout
+    !USE io_global, ONLY : stdout    !FZ: commented
+    USE io_global, ONLY : stdout, ionode     !FZ: test
     IMPLICIT NONE
     INTEGER, INTENT(IN) :: comm, nbnd
     INTEGER, INTENT(IN) :: m
@@ -152,6 +185,8 @@ CONTAINS
     INTEGER :: ibnd, npairs, ncontributing
     INTEGER :: n_underloaded ! number of band groups that are under max load
     INTEGER :: pair_bands(nbnd,nbnd)
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
 
     jblock = 7
 

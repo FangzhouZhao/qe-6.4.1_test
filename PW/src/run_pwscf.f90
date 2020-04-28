@@ -189,7 +189,7 @@ SUBROUTINE run_pwscf ( exit_status )
             CALL punch( 'config' )
         END IF
         !
-        IF (dft_is_hybrid() )  CALL stop_exx()
+        IF (dft_is_hybrid() )  CALL stop_exx()   !FZ: important! for Hybrid functional need to call a stop function
      END IF
      !
      CALL stop_clock( 'ions' ); !write(*,*)' stop ions' ; FLUSH(6)
@@ -216,7 +216,7 @@ SUBROUTINE run_pwscf ( exit_status )
            !
            ! ... final scf calculation with G-vectors for final cell
            !
-           CALL reset_gvectors ( )
+           CALL reset_gvectors ( )   !FZ:  this routine includes initialization of exx (exact exchange) ! for hybrid functional
            !
         ELSE IF ( ions_status == 2 ) THEN
            !

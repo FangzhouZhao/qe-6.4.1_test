@@ -58,12 +58,15 @@ CONTAINS
     USE command_line_options, ONLY : get_command_line, &
         nimage_, npool_, nband_, ntg_, nyfft_
     USE parallel_include
+    USE io_global, ONLY : stdout, ionode     !FZ: test
     !
     IMPLICIT NONE
     INTEGER, INTENT(IN), OPTIONAL :: my_world_comm
     LOGICAL, INTENT(IN), OPTIONAL :: start_images
     LOGICAL :: do_images
     INTEGER :: my_comm
+    integer :: unit   !FZ: test
+    unit = 4   !FZ: test
     !
     my_comm = MPI_COMM_WORLD
     IF ( PRESENT(my_world_comm) ) my_comm = my_world_comm
@@ -71,6 +74,17 @@ CONTAINS
     CALL mp_world_start( my_comm )
     CALL get_command_line ( )
     !
+    IF (ionode) THEN                                          !FZ: test
+      OPEN (unit = unit, file = 'test_mpstartup', &          !FZ: test
+        form = 'formatted', status = 'replace')               !FZ: test
+        WRITE (unit, *) "my_comm = ", my_comm  !FZ:  test
+        WRITE (unit, *) "npool_ = ", npool_  !FZ:  test
+        WRITE (unit, *) "nband_ = ", nband_  !FZ:  test
+        WRITE (unit, *) "ntg_ = ", ntg_  !FZ:  test
+        WRITE (unit, *) "intra_pool_comm = ", intra_pool_comm  !FZ:  test
+        WRITE (unit, *) "intra_image_comm = ", intra_image_comm  !FZ:  test
+      CLOSE (unit = unit) !, status = 'keep')      !FZ:  test
+    ENDIF !FZ: test
     do_images = .FALSE.
     IF ( PRESENT(start_images) ) do_images = start_images
     IF ( do_images ) THEN
